@@ -12,13 +12,11 @@ Then fill the following files with working content:
 
 Project structure to create:
 
-
-
 academic-backend/
 
 ├── app/
 
-│ ├── __init__.py
+│ ├── **init**.py
 
 │ ├── main.py
 
@@ -32,27 +30,27 @@ academic-backend/
 
 │ ├── models/
 
-│ │ └── __init__.py
+│ │ └── **init**.py
 
 │ ├── schemas/
 
-│ │ └── __init__.py
+│ │ └── **init**.py
 
 │ ├── routers/
 
-│ │ └── __init__.py
+│ │ └── **init**.py
 
 │ ├── services/
 
-│ │ └── __init__.py
+│ │ └── **init**.py
 
 │ └── utils/
 
-│ └── __init__.py
+│ └── **init**.py
 
 ├── tests/
 
-│ ├── __init__.py
+│ ├── **init**.py
 
 │ └── conftest.py
 
@@ -67,8 +65,6 @@ academic-backend/
 └── README.md
 
 Fill these files:
-
-
 
 docker-compose.yml:
 
@@ -195,69 +191,69 @@ Create these 5 model files inside app/models/:
 File: app/models/user.py
 Model: User
 Fields:
-    id: UUID primary key, default=uuid4
-    email: String(255), unique, indexed, not null
-    password_hash: String(255), not null
-    name: String(255), not null
-    major: String(255), not null (e.g. "Computer Science")
-    university: String(255), nullable
-    level: Integer, not null, default=1 (1-4 for year of study)
-    enrollment_year: Integer, not null
-    is_active: Boolean, default=True
-    total_credit_hours: Integer, default=0
-    completed_credit_hours: Integer, default=0
-    created_at: DateTime, default=datetime.utcnow
-    updated_at: DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+id: UUID primary key, default=uuid4
+email: String(255), unique, indexed, not null
+password_hash: String(255), not null
+name: String(255), not null
+major: String(255), not null (e.g. "Computer Science")
+university: String(255), nullable
+level: Integer, not null, default=1 (1-4 for year of study)
+enrollment_year: Integer, not null
+is_active: Boolean, default=True
+total_credit_hours: Integer, default=0
+completed_credit_hours: Integer, default=0
+created_at: DateTime, default=datetime.utcnow
+updated_at: DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
 
 File: app/models/course.py
 Model: Course
 Fields:
-    id: UUID primary key
-    code: String(20), unique, indexed (e.g. "CS101")
-    name: String(255), not null
-    credit_hours: Integer, not null
-    major: String(255), indexed
-    is_elective: Boolean, default=False
-    semester_recommended: Integer, nullable (which semester to take it)
-    prerequisites: JSON, default=[] (list of course codes)
-    created_at: DateTime
+id: UUID primary key
+code: String(20), unique, indexed (e.g. "CS101")
+name: String(255), not null
+credit_hours: Integer, not null
+major: String(255), indexed
+is_elective: Boolean, default=False
+semester_recommended: Integer, nullable (which semester to take it)
+prerequisites: JSON, default=[] (list of course codes)
+created_at: DateTime
 
 File: app/models/gpa.py
 Model: GPA (represents one course completion record)
 Fields:
-    id: UUID primary key
-    user_id: UUID ForeignKey("users.id"), indexed
-    course_id: UUID ForeignKey("courses.id")
-    grade: String(3) (e.g. "A+", "B", "F")
-    grade_numeric: Float (e.g. 4.0, 3.0)
-    credit_hours: Integer
-    semester: String(20) (e.g. "Fall 2023")
-    year: Integer
-    semester_number: Integer (1,2,3...)
-    created_at: DateTime
+id: UUID primary key
+user_id: UUID ForeignKey("users.id"), indexed
+course_id: UUID ForeignKey("courses.id")
+grade: String(3) (e.g. "A+", "B", "F")
+grade_numeric: Float (e.g. 4.0, 3.0)
+credit_hours: Integer
+semester: String(20) (e.g. "Fall 2023")
+year: Integer
+semester_number: Integer (1,2,3...)
+created_at: DateTime
 
 File: app/models/study_plan.py
 Model: StudyPlan
 Fields:
-    id: UUID primary key
-    user_id: UUID ForeignKey("users.id"), indexed
-    course_id: UUID ForeignKey("courses.id")
-    status: String(20), default="planned" (Must support: planned/available/locked/in_progress/completed)
-    planned_semester: String(20), nullable (e.g. "Semester 1", "Semester 2")
-    created_at: DateTime
-    updated_at: DateTime
+id: UUID primary key
+user_id: UUID ForeignKey("users.id"), indexed
+course_id: UUID ForeignKey("courses.id")
+status: String(20), default="planned" (Must support: planned/available/locked/in_progress/completed)
+planned_semester: String(20), nullable (e.g. "Semester 1", "Semester 2")
+created_at: DateTime
+updated_at: DateTime
 
 File: app/models/chat.py
 Model: ChatHistory
 Fields:
-    id: UUID primary key
-    user_id: UUID ForeignKey("users.id"), indexed
-    user_message: Text, not null
-    ai_response: Text, not null
-    tokens_used: Integer, default=0
-    created_at: DateTime, indexed
+id: UUID primary key
+user_id: UUID ForeignKey("users.id"), indexed
+user_message: Text, not null
+ai_response: Text, not null
+tokens_used: Integer, default=0
+created_at: DateTime, indexed
 
-After creating all models, update app/models/__init__.py to import all models so SQLAlchemy can discover them when init_db() is called:
+After creating all models, update app/models/**init**.py to import all models so SQLAlchemy can discover them when init_db() is called:
 
 from app.models.user import User
 from app.models.course import Course
@@ -275,8 +271,6 @@ PROMPT 3 — Pydantic Schemas
 
 Context:
 
-
-
 FastAPI backend, Academic Success Platform
 
 Using Pydantic v2
@@ -290,8 +284,6 @@ Create these schema files inside app/schemas/:
 File: app/schemas/user.py
 
 UserRegister (request):
-
-
 
 email: EmailStr
 
@@ -309,15 +301,11 @@ enrollment_year: int (ge=2000, le=2030)
 
 UserLogin (request):
 
-
-
 email: EmailStr
 
 password: str
 
 UserResponse (response, from ORM):
-
-
 
 id: UUID
 
@@ -341,8 +329,6 @@ created_at: datetime
 
 TokenResponse (response):
 
-
-
 access_token: str
 
 refresh_token: str
@@ -354,8 +340,6 @@ user: UserResponse
 File: app/schemas/academic.py
 
 CourseResponse (from ORM):
-
-
 
 id: UUID
 
@@ -375,8 +359,6 @@ prerequisites: list[str]
 
 GPAEntry (from ORM):
 
-
-
 id: UUID
 
 grade: str
@@ -393,8 +375,6 @@ course: CourseResponse (nested)
 
 GPAResponse:
 
-
-
 semester_gpa: float
 
 cumulative_gpa: float
@@ -405,8 +385,6 @@ history: list[GPAEntry]
 
 StudyPlanCourse (from ORM):
 
-
-
 course: CourseResponse
 
 status: str
@@ -414,8 +392,6 @@ status: str
 planned_semester: Optional[str]
 
 StudyPlanResponse:
-
-
 
 completed: list[StudyPlanCourse]
 
@@ -426,8 +402,6 @@ locked: list[StudyPlanCourse]
 in_progress: list[StudyPlanCourse]
 
 DashboardResponse:
-
-
 
 user: UserResponse
 
@@ -447,13 +421,9 @@ File: app/schemas/chat.py
 
 ChatRequest (request):
 
-
-
 message: str (min_length=3, max_length=1000)
 
 ChatMessageResponse (from ORM):
-
-
 
 id: UUID
 
@@ -467,8 +437,6 @@ created_at: datetime
 
 ChatHistoryResponse:
 
-
-
 messages: list[ChatMessageResponse]
 
 total: int
@@ -481,8 +449,6 @@ PROMPT 4 — Auth Utils + Service
 
 Context:
 
-
-
 FastAPI backend, Academic Success Platform
 
 settings object is imported from app.config
@@ -493,15 +459,11 @@ User model is in app.models.user
 
 File: app/utils/password.py
 
-
-
 hash_password(plain: str) → str using bcrypt via passlib CryptContext
 
 verify_password(plain: str, hashed: str) → bool
 
 File: app/utils/jwt_handler.py
-
-
 
 Use python-jose with HS256
 
@@ -514,8 +476,6 @@ decode_token(token: str) → dict | Nonereturn None on any error (expired, inval
 verify_access_token(token: str) → str | Nonereturns user_id or None
 
 File: app/dependencies.py
-
-
 
 get_db(): already exists, keep it
 
@@ -530,8 +490,6 @@ raise HTTPException 403 if user.is_active is False
 File: app/services/auth_service.py
 
 All functions are async and receive db: AsyncSession
-
-
 
 get_user_by_email(db, email: str) → User | None
 
@@ -561,8 +519,6 @@ PROMPT 5 — Auth Router
 
 Context:
 
-
-
 FastAPI backend, Academic Success Platform
 
 auth_service functions: create_user, authenticate_user, build_token_response
@@ -581,8 +537,6 @@ Endpoints:
 
 POST /register
 
-
-
 Request body: UserRegister
 
 Call create_user (raises 400 if email taken)
@@ -595,8 +549,6 @@ Status 201
 
 POST /login
 
-
-
 Request body: UserLogin
 
 Call authenticate_user
@@ -608,8 +560,6 @@ Return: TokenResponse
 Status 200
 
 POST /refresh
-
-
 
 Request body: {"refresh_token": str}
 
@@ -625,15 +575,11 @@ Raise 401 if invalid
 
 GET /me
 
-
-
 Requires: current_user from get_current_user dependency
 
 Return: UserResponse
 
 After creating the router, update app/main.py:
-
-
 
 Import the auth router
 
@@ -667,7 +613,7 @@ File: app/services/gpa_service.py
 All functions async, receive db: AsyncSession
 
 - calculate_semester_gpa(db, user_id: str, semester: str) -> float
-  Formula: sum(grade_numeric * credit_hours) / sum(credit_hours)
+  Formula: sum(grade_numeric \* credit_hours) / sum(credit_hours)
   Return 0.0 if no records
 - calculate_cumulative_gpa(db, user_id: str) -> float
   Same formula across ALL completed courses
@@ -693,12 +639,13 @@ All functions async, receive db: AsyncSession
   Group into: completed, available, locked, in_progress
   Return StudyPlanResponse
 - calculate_graduation_percentage(completed_credits: int) -> float
-  Return min(round(completed_credits / TOTAL_CREDIT_HOURS * 100, 1), 100.0)
+  Return min(round(completed_credits / TOTAL_CREDIT_HOURS \* 100, 1), 100.0)
 - get_dashboard_data(db, user_id: str) -> DashboardResponse
   Fetch user, calculate cumulative_gpa, build response
   Include current courses (status = "in_progress")
 
 ADDITIONAL WORKLOAD PLANNER LOGIC IN academic_service.py:
+
 - calculate_semester_workload(db, user_id: str, semester: str) -> str:
   Sum credit_hours for all StudyPlan records with status="in_progress" and planned_semester=semester.
   If total < 12 return "Light", if 12 <= total <= 18 return "Optimal", if total > 18 return "Heavy".
@@ -722,6 +669,7 @@ All endpoints require get_current_user dependency
 - GET /plan/completed -> list[StudyPlanCourse]
 
 ADDITIONAL PLANNER & GPA ENDPOINTS TO IMPLEMENT:
+
 - POST /gpa/add -> Request body: {course_id: UUID, grade: str, semester: str, year: int, semester_number: int}. Calls add_completed_course_grade. Returns status success. Status 201.
 - POST /plan/activate -> Request body: {semester: str}. Calls activate_semester_planner. Returns status success. Status 200.
 - GET /plan/workload/{semester} -> Returns {"total_hours": int, "status": "Light/Optimal/Heavy"} by calling calculate_semester_workload.
@@ -736,8 +684,6 @@ PROMPT 7 — RAG Service (Embeddings)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Context:
-
-
 
 FastAPI backend, Academic Success Platform
 
@@ -756,8 +702,6 @@ File: app/models/embedding.py
 Model: StudentEmbedding
 
 Fields:
-
-
 
 id: UUID primary key
 
@@ -784,8 +728,6 @@ Add to app/models/init.py
 File: app/services/rag_service.py
 
 All functions async
-
-
 
 generate_student_chunks(user: User, completed_courses: list, gpa_data: dict) → list[dict]
 
@@ -871,8 +813,6 @@ PROMPT 8 — AI Service + Chat Router (SSE Streaming)
 
 Context:
 
-
-
 FastAPI backend, Academic Success Platform
 
 OpenAI SDK v1.x (new interface: client.chat.completions.create)
@@ -888,8 +828,6 @@ ChatHistory model stores conversation
 Cache functions: increment(key), get_counter(key) from app.cache
 
 File: app/services/ai_service.py
-
-
 
 get_system_prompt(user: User) → str
 
@@ -961,8 +899,6 @@ All endpoints require get_current_user
 
 POST /ask
 
-
-
 Request body: ChatRequest (message: str)
 
 Check rate limit → 429 if exceeded with message "Daily limit reached. Try again tomorrow."
@@ -975,15 +911,11 @@ Build SSE generator:async def generate(): full_response = "" async for token in 
 
 GET /history
 
-
-
 Optional query params: limit=20, offset=0
 
 Return ChatHistoryResponse
 
 GET /limit
-
-
 
 Return {"used": int, "max": int, "remaining": int}
 
@@ -997,8 +929,6 @@ PROMPT 9 — Seed Data Script
 
 Context:
 
-
-
 FastAPI backend, Academic Success Platform
 
 All models exist: User, Course, GPA, StudyPlan, ChatHistory
@@ -1010,8 +940,6 @@ Run with: python scripts/seed.py
 File: scripts/seed.py
 
 Create an async main() function that:
-
-
 
 Creates 10 Computer Science courses:
 
@@ -1087,8 +1015,6 @@ PROMPT 10 — Tests
 
 Context:
 
-
-
 FastAPI backend, Academic Success Platform
 
 Using pytest + pytest-asyncio
@@ -1099,8 +1025,6 @@ The seed data from Prompt 9 represents the expected state
 
 File: tests/conftest.py
 
-
-
 Create async test client fixture using httpx.AsyncClient and ASGITransport
 
 Create test_db fixture that creates fresh tables before each test and drops after
@@ -1110,8 +1034,6 @@ Create test_user fixture that creates the Ahmed Ali user and returns (user, toke
 File: tests/test_auth.py
 
 Test cases:
-
-
 
 test_register_success: POST /api/auth/register with valid data → 201, has access_token
 
@@ -1129,8 +1051,6 @@ File: tests/test_academic.py
 
 Test cases (all require auth token):
 
-
-
 test_dashboard: GET /api/academic/dashboard → 200, has current_gpa, graduation_percentage
 
 test_gpa: GET /api/academic/gpa → 200, has cumulative_gpa as float
@@ -1142,8 +1062,6 @@ test_available_courses: GET /api/academic/plan/available → 200, list not empty
 File: tests/test_gpa_calculator.py
 
 Unit tests for calculate_cumulative_gpa logic:
-
-
 
 test_gpa_calculation_correct: given grades A+(5.0,3cr) B+(4.25,3cr) → expected GPA = 4.625
 
@@ -1168,8 +1086,6 @@ You are reviewing a FastAPI backend for an Academic Success Platform.
 The project uses: FastAPI, SQLAlchemy 2.0 async, PostgreSQL + pgvector, Redis, OpenAI SDK v1.
 
 Review the entire codebase and check for:
-
-
 
 Missing imports or circular imports
 

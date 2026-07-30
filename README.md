@@ -6,7 +6,7 @@ SCHOLAR is a premium academic success platform that helps students manage their 
 
 - 📊 **Academic Overview Dashboard** - Real-time GPA, credit completion, and graduation progress tracking
 - 📚 **Curriculum Planner** - Responsive grid layout for organizing courses by semester
-- 🤖 **AI Academic Advisor** - Chat interface for personalized academic guidance  
+- 🤖 **AI Academic Advisor** - Chat interface for personalized academic guidance
 - ⚙️ **Settings & Profile** - Manage account, theme, language, and grading system
 - 🌓 **Dark/Light Mode** - Premium dark mode (deep navy/slate) with smooth transitions
 - 🌐 **Multi-language Support** - Full English & Arabic with RTL/LTR layout mirroring
@@ -62,11 +62,13 @@ src/
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    cd V1
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    # or
@@ -74,11 +76,13 @@ src/
    ```
 
 3. **Start the development server**
+
    ```bash
    npm start
    ```
 
 4. **Run on your platform**
+
    ```bash
    # iOS Simulator
    npm run ios
@@ -95,6 +99,7 @@ src/
 ### Adding a New Course
 
 Users can add courses through the Curriculum tab:
+
 1. Tap the "+" button in the Curriculum screen header
 2. Fill in course details (code, name, credits, semester)
 3. Course will be added to the global state and persisted locally
@@ -106,6 +111,7 @@ Users can toggle between light and dark modes in Settings. The app applies the t
 ### Language Support
 
 The app fully supports English and Arabic with:
+
 - RTL layout mirroring for Arabic
 - Automatic layout direction switching
 - Complete translation dictionary in `src/lib/i18n.ts`
@@ -113,6 +119,7 @@ The app fully supports English and Arabic with:
 ### State Management
 
 All app state is managed by Zustand and persisted to AsyncStorage:
+
 - User profile & authentication
 - Course list & GPA data
 - Chat history
@@ -127,6 +134,7 @@ All app state is managed by Zustand and persisted to AsyncStorage:
 ## GPA Calculation
 
 GPA is calculated based on the selected grading system:
+
 - **4.0 Scale**: A+ = 4.0, A = 4.0, A- = 3.7, B+ = 3.3, etc.
 - **5.0 Scale**: A+ = 5.0, A = 5.0, A- = 4.5, B+ = 4.0, etc.
 
@@ -147,6 +155,7 @@ Dark/light mode is handled through the `Colors` object in `src/lib/theme.ts`.
 ## Building for Production
 
 ### iOS
+
 ```bash
 npm run build:ios
 # Or with local preview
@@ -154,6 +163,7 @@ npm run preview
 ```
 
 ### Android
+
 ```bash
 npm run build:android
 ```
@@ -172,14 +182,17 @@ Currently, the app uses local state for all data. To integrate with a backend:
 ## Troubleshooting
 
 ### Blank/White Screen
+
 - Clear cache: `expo start --clear`
 - Rebuild: `npm install` then start again
 
 ### AsyncStorage Not Persisting
+
 - Check device storage permissions
 - Clear app data and restart
 
 ### Build Failures
+
 - Run `npm install` to ensure all dependencies are installed
 - Check Node version (should be 18+)
 - Review EAS logs: `eas build --local`

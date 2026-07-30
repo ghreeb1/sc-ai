@@ -13,12 +13,14 @@ Get SCHOLAR mobile running in 5 minutes!
 ## Installation (3 steps)
 
 ### 1. Install Dependencies
+
 ```bash
 cd V1
 npm install
 ```
 
 ### 2. Start Development Server
+
 ```bash
 npm start
 ```
@@ -28,16 +30,19 @@ You'll see a QR code and options in the terminal.
 ### 3. Open on Device
 
 **Option A: iPhone Simulator (macOS)**
+
 ```bash
 npm run ios
 ```
 
 **Option B: Android Emulator**
+
 ```bash
 npm run android
 ```
 
 **Option C: Physical Device**
+
 - Scan QR code with Expo Go app (iOS/Android)
 - Or press `w` for web
 
@@ -84,27 +89,31 @@ src/lib/
 ✅ **Settings** - Profile, theme, language, grading system  
 ✅ **Dark Mode** - Premium dark theme by default  
 ✅ **Multi-language** - English & Arabic with RTL support  
-✅ **Local Storage** - All data saved automatically  
+✅ **Local Storage** - All data saved automatically
 
 ## Troubleshooting
 
 ### Blank/white screen?
+
 ```bash
 npm start --clear
 ```
 
 ### Module not found?
+
 ```bash
 rm -rf node_modules
 npm install
 ```
 
 ### Can't connect to simulator?
+
 - Try restarting the simulator
 - Clear metro cache: `npm start -- --clear`
 - Check port 19000 is not blocked
 
 ### iOS build failing?
+
 ```bash
 expo prebuild --clean
 npm run ios

@@ -1,0 +1,3377 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Academic Success Platform API",
+    "description": "Backend API for the Academic Success Platform. Provides student management, GPA tracking, AI-powered recommendations, and course workload analysis.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register a new student account",
+        "description": "Create a new student account and return a fresh token pair.\n\nDelegates to ``create_user`` which raises **400** if the e-mail is already\nregistered.  On success, the response includes both an access token and a\nrefresh token so the client can start making authenticated requests\nimmediately without a separate login call.\n\nArgs:\n    data: Validated registration payload (email, password, name, major, …).\n    db: Injected async database session.\n\nReturns:\n    :class:`~app.schemas.user.TokenResponse` with the access token, refresh\n    token, and the new user's serialised profile.\n\nRaises:\n    HTTPException: 400 ``\"Email already registered\"`` — raised by\n        ``create_user`` when the e-mail violates the unique constraint.",
+        "operationId": "register_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRegister"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "JWT token pair and serialised user profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Authenticate and receive a JWT token pair",
+        "description": "Verify credentials and return a fresh access + refresh token pair.\n\nReturns the same **401** for both \"unknown e-mail\" and \"wrong password\"\nto prevent user enumeration.\n\nArgs:\n    data: Login payload containing ``email`` and ``password``.\n    db: Injected async database session.\n\nReturns:\n    :class:`~app.schemas.user.TokenResponse` with the access token, refresh\n    token, and the authenticated user's serialised profile.\n\nRaises:\n    HTTPException: 401 ``\"Invalid email or password\"`` — raised when\n        credentials are invalid or the account does not exist.",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "JWT token pair and serialised user profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/token": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "OAuth2 password-flow token endpoint (Swagger UI)",
+        "description": "OAuth2-compatible token endpoint that accepts form-encoded credentials.\n\nThis endpoint exists solely to satisfy the ``OAuth2PasswordBearer`` scheme\nused by Swagger UI's **Authorize** dialog, which always POSTs\n``application/x-www-form-urlencoded`` with ``username`` and ``password``\nfields.  The ``username`` field is treated as the student's e-mail address.\n\nFor programmatic API access prefer ``POST /api/auth/login`` with a JSON\nbody instead.\n\nArgs:\n    form: Standard OAuth2 password request form (``username`` = email,\n        ``password`` = plain-text password).\n    db: Injected async database session.\n\nReturns:\n    :class:`~app.schemas.user.TokenResponse` with the access token, refresh\n    token, and the authenticated user's serialised profile.\n\nRaises:\n    HTTPException: 401 ``\"Invalid email or password\"`` — credentials are\n        wrong or the account does not exist.",
+        "operationId": "token_api_auth_token_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_token_api_auth_token_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "JWT token pair and serialised user profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Rotate tokens using a valid refresh token",
+        "description": "Issue a new access + refresh token pair from a valid refresh token.\n\nThe old refresh token is consumed (clients must store the new one).\nThe ``type`` claim in the token is enforced by ``verify_refresh_token`` —\npresenting an access token here will be rejected even if it is otherwise\nvalid.\n\nArgs:\n    data: Body containing the ``refresh_token`` string.\n    db: Injected async database session.\n\nReturns:\n    :class:`~app.schemas.user.TokenResponse` with a fresh access token,\n    new refresh token, and the user's serialised profile.\n\nRaises:\n    HTTPException: 401 when the token is invalid, expired, wrong type, or\n        the associated user no longer exists or is inactive.",
+        "operationId": "refresh_api_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "New JWT token pair and serialised user profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Retrieve the authenticated user's profile",
+        "operationId": "me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Serialised profile of the currently authenticated student.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Update the authenticated user's profile",
+        "description": "Partially update the authenticated user's mutable profile fields.\n\nOnly ``name``, ``major``, ``level``, ``university``, and\n``total_credit_hours`` may be changed. Identity fields (``id``, ``email``)\nand ``created_at`` are immutable and are silently ignored even if they\nappear in the request body.\n\nSend only the fields you want to change — omitted fields are left\nuntouched.\n\nArgs:\n    data: Partial profile payload (all fields optional).\n    db: Injected async database session.\n    current_user: Authenticated user resolved from the Bearer token.\n\nReturns:\n    :class:`~app.schemas.user.UserResponse` — the full serialised profile\n    of the user after the update.\n\nRaises:\n    HTTPException: 401 for a missing or invalid Bearer token.",
+        "operationId": "update_me_api_auth_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated serialised profile of the currently authenticated student.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Request a password-reset token",
+        "description": "Generate a short-lived password-reset token for the given e-mail address.\n\n**Always returns HTTP 200** regardless of whether the e-mail is registered\n— this prevents user-enumeration attacks.  When the account exists, a UUID\ntoken is stored in Redis with a 15-minute TTL and returned in the response\nbody so the mobile client can construct a deep-link or pass it directly to\n``POST /api/auth/reset-password``.\n\nIn a production deployment the token would be e-mailed rather than returned\nin the response.  Returning it here is intentional for the mobile-first\ndevelopment workflow where the app handles the reset link itself.\n\nArgs:\n    data: Body containing the ``email`` field.\n    db: Injected async database session.\n\nReturns:\n    :class:`~app.schemas.user.ForgotPasswordResponse` with a\n    ``message`` string and a ``reset_token`` (empty string when the\n    e-mail is unknown).",
+        "operationId": "forgot_password_api_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Confirmation message and a one-time reset token. reset_token is an empty string when the e-mail is not registered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgotPasswordResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/reset-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Reset password using a valid reset token",
+        "description": "Consume a one-time reset token and update the user's password.\n\nThe token must have been issued by ``POST /api/auth/forgot-password`` and\nmust not be expired (15-minute TTL) or already consumed.  After a\nsuccessful reset the token is permanently deleted from Redis and cannot be\nreused.\n\nAfter resetting, the user must log in again with the new password via\n``POST /api/auth/login`` — any existing access/refresh tokens remain\nvalid until their natural expiry but the client should discard them.\n\nArgs:\n    data: Body containing ``token`` and ``new_password``.\n    db: Injected async database session.\n\nReturns:\n    :class:`~app.schemas.user.MessageResponse` confirming the update.\n\nRaises:\n    HTTPException: 400 ``\"Invalid or expired reset token\"`` when the\n        token is not found in Redis (expired, consumed, or never issued).",
+        "operationId": "reset_password_api_auth_reset_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Confirmation that the password was updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Signal session logout (client must discard tokens)",
+        "description": "Signal a session logout for the authenticated user.\n\nJWT tokens are stateless and cannot be server-side invalidated without a\ntoken blacklist (not implemented at this stage).  This endpoint serves as\na formal contract point for the mobile client — upon receiving the 200\nresponse the client **must** discard both its access token and refresh\ntoken from local storage.\n\nRequiring a valid Bearer token ensures this endpoint is not callable\nanonymously and provides an audit log entry for the logout event.\n\nArgs:\n    current_user: Authenticated user resolved from the Bearer token.\n\nReturns:\n    :class:`~app.schemas.user.MessageResponse` with\n    ``\"Logged out successfully.\"``.\n\nRaises:\n    HTTPException: 401 for a missing or invalid Bearer token.",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "200": {
+            "description": "Confirmation that the logout was acknowledged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/account": {
+      "delete": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Soft-delete the authenticated user's account",
+        "description": "Soft-delete the authenticated user account.\n\nThe user's `is_active` flag is set to False. They will no longer be able\nto log in or access protected endpoints. All data (courses, GPA, chat\nhistory, etc.) remains intact in the database.\n\nArgs:\n    db: Injected async database session.\n    current_user: Authenticated user resolved from the Bearer token.\n\nReturns:\n    HTTP 204 No Content.\n\nRaises:\n    HTTPException: 401 for a missing or invalid Bearer token.",
+        "operationId": "delete_account_api_auth_account_delete",
+        "responses": {
+          "204": {
+            "description": "No content upon successful deletion."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/dashboard": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Student dashboard overview",
+        "description": "Return all data needed to render the student's home dashboard.\n\nIncludes cumulative and semester GPA, credit-hour progress, graduation\npercentage, current (in-progress) courses, and workload classification.",
+        "operationId": "dashboard_api_academic_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Aggregated GPA, progress, workload, and current courses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/gpa": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "GPA summary",
+        "operationId": "gpa_summary_api_academic_gpa_get",
+        "responses": {
+          "200": {
+            "description": "Semester GPA, cumulative GPA, total credits, and full grade history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GPAResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/gpa/history": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Per-semester GPA history",
+        "operationId": "gpa_history_api_academic_gpa_history_get",
+        "responses": {
+          "200": {
+            "description": "Chronological list of per-semester GPA aggregates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Gpa History Api Academic Gpa History Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/plan": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Full study plan",
+        "operationId": "study_plan_api_academic_plan_get",
+        "responses": {
+          "200": {
+            "description": "Study plan partitioned into completed, in_progress, available, and locked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyPlanResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/plan/available": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Available courses",
+        "operationId": "plan_available_api_academic_plan_available_get",
+        "responses": {
+          "200": {
+            "description": "Planned courses whose prerequisites are all satisfied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StudyPlanCourse"
+                  },
+                  "type": "array",
+                  "title": "Response Plan Available Api Academic Plan Available Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/plan/completed": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Completed courses",
+        "operationId": "plan_completed_api_academic_plan_completed_get",
+        "responses": {
+          "200": {
+            "description": "Courses the student has successfully completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StudyPlanCourse"
+                  },
+                  "type": "array",
+                  "title": "Response Plan Completed Api Academic Plan Completed Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/plan/workload/{semester_number}": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Semester workload",
+        "operationId": "workload_api_academic_plan_workload__semester_number__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "semester_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Semester Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credit-hour total and workload tier for the given semester.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/academic/gpa/add": {
+      "post": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Record a course grade",
+        "operationId": "add_grade_api_academic_gpa_add_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GradeCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Confirmation that the grade was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Add Grade Api Academic Gpa Add Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/gpa/{grade_id}": {
+      "patch": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Update a recorded course grade",
+        "operationId": "update_grade_api_academic_gpa__grade_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "grade_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Grade Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GPAUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated GPA entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GPAEntry"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Delete a recorded course grade",
+        "operationId": "delete_grade_api_academic_gpa__grade_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "grade_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Grade Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content on success."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/academic/plan/activate": {
+      "post": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Activate a semester's planned courses",
+        "operationId": "activate_semester_api_academic_plan_activate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemesterActivateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Confirmation that eligible courses were activated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Activate Semester Api Academic Plan Activate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/academic/courses": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "List user's courses",
+        "operationId": "list_courses_api_academic_courses_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Max items per page",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Max items per page"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Items to skip",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Items to skip"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of courses owned by the authenticated user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedCourseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Create a new course",
+        "operationId": "create_new_course_api_academic_courses_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created course object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/academic/courses/{course_id}": {
+      "get": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Get a course",
+        "operationId": "retrieve_course_api_academic_courses__course_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Details of the specific course.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Update a course",
+        "operationId": "patch_course_api_academic_courses__course_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated course object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Academic"
+        ],
+        "summary": "Delete a course",
+        "operationId": "remove_course_api_academic_courses__course_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content upon successful deletion."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/ask": {
+      "post": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "Ask the AI academic advisor (streaming SSE)",
+        "operationId": "ask_api_ai_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "A text/event-stream of JSON objects: {\"token\": \"...\", \"done\": false} … {\"token\": \"\", \"done\": true}",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/ai/history": {
+      "get": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "Paginated chat history",
+        "operationId": "history_api_ai_history_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Maximum turns to return.",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Maximum turns to return."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of turns to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Number of turns to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stored chat turns for the current user, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatHistoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/limit": {
+      "get": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "Daily AI rate-limit status",
+        "operationId": "rate_limit_status_api_ai_limit_get",
+        "responses": {
+          "200": {
+            "description": "Current usage, daily maximum, and remaining requests.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Rate Limit Status Api Ai Limit Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/ai/conversations": {
+      "get": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "List all conversations",
+        "operationId": "list_user_conversations_api_ai_conversations_get",
+        "responses": {
+          "200": {
+            "description": "A list of the current user's conversations, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationListItem"
+                  },
+                  "type": "array",
+                  "title": "Response List User Conversations Api Ai Conversations Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "Create a new conversation",
+        "operationId": "create_new_conversation_api_ai_conversations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The newly created conversation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/ai/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "Get a conversation with its messages",
+        "operationId": "get_conversation_detail_api_ai_conversations__conversation_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full conversation metadata and all messages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "Delete a conversation",
+        "operationId": "delete_user_conversation_api_ai_conversations__conversation_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/conversations/{conversation_id}/messages": {
+      "post": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "Post a message to a conversation",
+        "operationId": "post_conversation_message_api_ai_conversations__conversation_id__messages_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The AI response saved in the conversation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/conversations/{conversation_id}/messages/stream": {
+      "post": {
+        "tags": [
+          "AI Advisor"
+        ],
+        "summary": "Post a message to a conversation (streaming SSE)",
+        "description": "Stream an AI reply into a conversation via Server-Sent Events.\n\n- Saves the user message and the completed AI reply to ``chat_history``.\n- Bumps ``conversations.updated_at`` after the stream finishes.\n- Respects the same daily rate-limit as all other AI endpoints.",
+        "operationId": "stream_conversation_message_endpoint_api_ai_conversations__conversation_id__messages_stream_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A text/event-stream of JSON objects: {\"token\": \"...\", \"done\": false} … {\"token\": \"\", \"done\": true}",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/preferences": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Retrieve the authenticated user's preferences",
+        "description": "Return the preference fields stored on the authenticated user's account.\n\nThese fields are also included in the full ``UserResponse`` returned by\n``GET /api/auth/me``, but this endpoint exists as a dedicated, lightweight\nalternative for clients that only need preference data.\n\nArgs:\n    current_user: Authenticated user resolved from the Bearer token.\n\nReturns:\n    :class:`~app.schemas.user.UserPreferencesResponse` — the five\n    preference fields (may be ``null`` if not yet set).\n\nRaises:\n    HTTPException: 401 for a missing or invalid Bearer token.",
+        "operationId": "get_preferences_api_user_preferences_get",
+        "responses": {
+          "200": {
+            "description": "Serialised preference fields for the currently authenticated student.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferencesResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Update the authenticated user's preferences",
+        "description": "Partially update the authenticated user's preference fields.\n\nAll fields are optional — send only what needs to change.  Fields omitted\nfrom the request body are left untouched (partial-update / PATCH semantics\neven though the verb is ``PUT`` for idiomatic REST resource replacement\nintent).\n\nArgs:\n    data: Preference payload (all fields optional).\n    db: Injected async database session.\n    current_user: Authenticated user resolved from the Bearer token.\n\nReturns:\n    :class:`~app.schemas.user.UserPreferencesResponse` — the five\n    preference fields after the update.\n\nRaises:\n    HTTPException: 401 for a missing or invalid Bearer token.",
+        "operationId": "update_preferences_api_user_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPreferencesUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Serialised preference fields after the update.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferencesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/achievements": {
+      "get": {
+        "tags": [
+          "Achievements"
+        ],
+        "summary": "List all achievements",
+        "description": "Retrieve all academic achievements and the user's progress for each.\n\nAchievements are returned ordered by category, then by title. Progress is\ncomputed dynamically on each request (0-100%).",
+        "operationId": "list_achievements_api_achievements_get",
+        "responses": {
+          "200": {
+            "description": "Full catalog of achievements with the student's dynamic progress.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AchievementsListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health check",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Returns the service status and current runtime environment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AchievementResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique achievement identifier (UUID v4)."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Short achievement title."
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Full description of the unlock condition."
+          },
+          "icon": {
+            "type": "string",
+            "title": "Icon",
+            "description": "Icon identifier — an emoji or icon key string."
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "description": "Grouping category: 'academic' | 'credits' | 'planning' | 'semester' | 'ai'."
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points",
+            "description": "Reward points awarded on unlock."
+          },
+          "earned": {
+            "type": "boolean",
+            "title": "Earned",
+            "description": "True if the student has unlocked this achievement."
+          },
+          "earned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earned At",
+            "description": "UTC timestamp when the achievement was unlocked, or null if not yet earned."
+          },
+          "progress": {
+            "type": "integer",
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Progress",
+            "description": "Completion percentage (0–100). Always computed dynamically — 100 for earned achievements, partial progress otherwise."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "icon",
+          "category",
+          "points",
+          "earned",
+          "progress"
+        ],
+        "title": "AchievementResponse",
+        "description": "A single achievement entry with earned status and dynamic progress.\n\nUsed in both the full list (``GET /api/achievements``) and the dashboard\nsummary (embedded in :class:`~app.schemas.academic.DashboardResponse`)."
+      },
+      "AchievementsListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of achievements in the catalog."
+          },
+          "unlocked": {
+            "type": "integer",
+            "title": "Unlocked",
+            "description": "Number of achievements the student has earned."
+          },
+          "achievements": {
+            "items": {
+              "$ref": "#/components/schemas/AchievementResponse"
+            },
+            "type": "array",
+            "title": "Achievements",
+            "description": "All achievement entries ordered by category then title."
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "unlocked"
+        ],
+        "title": "AchievementsListResponse",
+        "description": "Full achievement list response returned by ``GET /api/achievements``."
+      },
+      "AchievementsSummary": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of achievements in the catalog."
+          },
+          "unlocked": {
+            "type": "integer",
+            "title": "Unlocked",
+            "description": "Number of achievements the student has earned."
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/AchievementResponse"
+            },
+            "type": "array",
+            "title": "Recent",
+            "description": "Up to 3 most recently earned achievements, newest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "unlocked"
+        ],
+        "title": "AchievementsSummary",
+        "description": "Compact achievement summary embedded in the dashboard response.\n\nContains only the aggregate counts and the three most recently earned\nachievements so the dashboard does not need a separate API call."
+      },
+      "Body_token_api_auth_token_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "password"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_token_api_auth_token_post"
+      },
+      "ChatHistoryResponse": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageResponse"
+            },
+            "type": "array",
+            "title": "Messages",
+            "description": "Ordered list of chat turns (most recent last by default)."
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of stored chat turns for this student (unpaginated count)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages",
+          "total"
+        ],
+        "title": "ChatHistoryResponse"
+      },
+      "ChatMessageResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique chat message identifier (UUID v4)."
+          },
+          "user_message": {
+            "type": "string",
+            "title": "User Message",
+            "description": "The original message sent by the student."
+          },
+          "ai_response": {
+            "type": "string",
+            "title": "Ai Response",
+            "description": "The AI advisor's response text."
+          },
+          "tokens_used": {
+            "type": "integer",
+            "title": "Tokens Used",
+            "description": "Total tokens consumed by this conversation turn (prompt + completion)."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp of when this turn was recorded (UTC)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_message",
+          "ai_response",
+          "tokens_used",
+          "created_at"
+        ],
+        "title": "ChatMessageResponse"
+      },
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 3,
+            "title": "Message",
+            "description": "The student's question or prompt to the AI advisor."
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest"
+      },
+      "ConversationCreateRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Optional conversation title. Auto-generated if omitted."
+          }
+        },
+        "type": "object",
+        "title": "ConversationCreateRequest"
+      },
+      "ConversationListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Conversation identifier."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Conversation title."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "When the conversation was created (UTC)."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "When the conversation was last updated (UTC)."
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count",
+            "description": "Number of messages in this conversation."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "message_count"
+        ],
+        "title": "ConversationListItem",
+        "description": "Lightweight representation for the conversation list endpoint."
+      },
+      "ConversationMessageRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Message",
+            "description": "The message to send to the AI advisor in this conversation."
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ConversationMessageRequest"
+      },
+      "ConversationMessageResponse": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id",
+            "description": "Conversation this message belongs to."
+          },
+          "message": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChatMessageResponse"
+              }
+            ],
+            "description": "The recorded chat turn."
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "message"
+        ],
+        "title": "ConversationMessageResponse",
+        "description": "Response after posting a message to a conversation."
+      },
+      "ConversationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Conversation identifier."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Conversation title."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "When the conversation was created (UTC)."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "When the conversation was last updated (UTC)."
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageResponse"
+            },
+            "type": "array",
+            "title": "Messages",
+            "description": "All messages in this conversation, ordered oldest first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationResponse",
+        "description": "Full conversation with metadata."
+      },
+      "CourseCreateRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Short course code, e.g. 'CS101'."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Full course title."
+          },
+          "credit_hours": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Credit Hours",
+            "description": "Credit hours awarded on completion."
+          },
+          "major": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Major",
+            "description": "Major / programme this course belongs to."
+          },
+          "is_elective": {
+            "type": "boolean",
+            "title": "Is Elective",
+            "description": "True if the course is an elective.",
+            "default": false
+          },
+          "semester_recommended": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semester Recommended",
+            "description": "Advisory semester in which this course is typically taken."
+          },
+          "prerequisites": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prerequisites",
+            "description": "List of course codes that must be completed before this course."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "in_progress",
+              "completed"
+            ],
+            "title": "Status",
+            "description": "Lifecycle status to store in study_plans.status. 'planned' | 'in_progress' | 'completed'. 'locked' is a server-computed projection and is never accepted here.",
+            "default": "planned"
+          },
+          "semester_number": {
+            "type": "integer",
+            "minimum": 1,
+            "title": "Semester Number",
+            "description": "Canonical integer semester key stored in study_plans.semester_number. Defaults to 1 when not provided.",
+            "default": 1
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade",
+            "description": "Letter grade required only when status is 'completed'. Must be one of: A+, A, A-, B+, B, B-, C+, C, C-, D+, D, F."
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "credit_hours"
+        ],
+        "title": "CourseCreateRequest"
+      },
+      "CourseResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique course identifier (UUID v4)."
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Short course code, e.g. 'CS101'."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Full course title."
+          },
+          "credit_hours": {
+            "type": "integer",
+            "title": "Credit Hours",
+            "description": "Credit hours awarded on completion."
+          },
+          "major": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Major",
+            "description": "Major / programme this course belongs to."
+          },
+          "is_elective": {
+            "type": "boolean",
+            "title": "Is Elective",
+            "description": "True if the course is an elective."
+          },
+          "semester_recommended": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semester Recommended",
+            "description": "Advisory semester in which this course is typically taken."
+          },
+          "prerequisites": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prerequisites",
+            "description": "List of course codes that must be completed before this course."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "credit_hours",
+          "is_elective"
+        ],
+        "title": "CourseResponse",
+        "description": "Serialised representation of a ``Course`` ORM instance."
+      },
+      "CourseSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique course identifier (UUID v4)."
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Short course code, e.g. 'CS101'."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Full course title."
+          },
+          "credit_hours": {
+            "type": "integer",
+            "title": "Credit Hours",
+            "description": "Credit hours awarded on completion."
+          },
+          "major": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Major",
+            "description": "Major / programme this course belongs to."
+          },
+          "is_elective": {
+            "type": "boolean",
+            "title": "Is Elective",
+            "description": "True if the course is an elective."
+          },
+          "semester_recommended": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semester Recommended",
+            "description": "Advisory semester in which this course is typically taken."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "credit_hours",
+          "is_elective"
+        ],
+        "title": "CourseSummaryResponse",
+        "description": "Lighter version of CourseResponse omitting large JSON columns (like prerequisites) for list endpoints."
+      },
+      "CourseUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Full course title."
+          },
+          "credit_hours": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credit Hours",
+            "description": "Credit hours awarded on completion."
+          },
+          "major": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Major",
+            "description": "Major / programme this course belongs to."
+          },
+          "is_elective": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Elective",
+            "description": "True if the course is an elective."
+          },
+          "semester_recommended": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semester Recommended",
+            "description": "Advisory semester in which this course is typically taken."
+          },
+          "prerequisites": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prerequisites",
+            "description": "List of course codes that must be completed before this course."
+          }
+        },
+        "type": "object",
+        "title": "CourseUpdateRequest"
+      },
+      "DashboardResponse": {
+        "properties": {
+          "user": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserResponse"
+              }
+            ],
+            "description": "Authenticated student's profile."
+          },
+          "semester_gpa": {
+            "type": "number",
+            "title": "Semester Gpa",
+            "description": "GPA for the most recently completed semester."
+          },
+          "cumulative_gpa": {
+            "type": "number",
+            "title": "Cumulative Gpa",
+            "description": "Weighted cumulative GPA across all completed semesters."
+          },
+          "completed_credit_hours": {
+            "type": "integer",
+            "title": "Completed Credit Hours",
+            "description": "Total credit hours the student has completed."
+          },
+          "total_credit_hours": {
+            "type": "integer",
+            "title": "Total Credit Hours",
+            "description": "Total credit hours in the student's study plan."
+          },
+          "graduation_percentage": {
+            "type": "number",
+            "title": "Graduation Percentage",
+            "description": "Percentage of required graduation credits completed."
+          },
+          "estimated_graduation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Graduation Year",
+            "description": "Estimated year of graduation based on current academic progress and typical credit load."
+          },
+          "current_courses": {
+            "items": {
+              "$ref": "#/components/schemas/StudyPlanCourse"
+            },
+            "type": "array",
+            "title": "Current Courses",
+            "description": "Courses currently in progress (mirrors StudyPlanResponse.in_progress)."
+          },
+          "workload_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workload Tier",
+            "description": "Current semester workload tier: 'Light' | 'Optimal' | 'Heavy'."
+          },
+          "workload_credit_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workload Credit Hours",
+            "description": "Total credit hours in the current in-progress semester."
+          },
+          "achievements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AchievementsSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Achievement summary (total, unlocked count, 3 most recent). Null when no achievements are seeded."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "semester_gpa",
+          "cumulative_gpa",
+          "completed_credit_hours",
+          "total_credit_hours",
+          "graduation_percentage"
+        ],
+        "title": "DashboardResponse"
+      },
+      "ForgotPasswordRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "Registered student e-mail address."
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "ForgotPasswordRequest",
+        "description": "Request body for POST /api/auth/forgot-password."
+      },
+      "ForgotPasswordResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable status message."
+          },
+          "reset_token": {
+            "type": "string",
+            "title": "Reset Token",
+            "description": "UUID reset token to pass to POST /api/auth/reset-password. Empty string when the e-mail is not registered."
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "reset_token"
+        ],
+        "title": "ForgotPasswordResponse",
+        "description": "Response body for POST /api/auth/forgot-password.\n\nAlways returns HTTP 200 regardless of whether the e-mail is registered\n(user-enumeration prevention).  When the account exists, ``reset_token``\nis a non-empty UUID string; when the account does not exist it is an\nempty string so the response shape remains consistent."
+      },
+      "GPAEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique GPA entry identifier (UUID v4)."
+          },
+          "grade": {
+            "type": "string",
+            "title": "Grade",
+            "description": "Letter grade awarded, e.g. 'A', 'B+'."
+          },
+          "grade_numeric": {
+            "type": "number",
+            "title": "Grade Numeric",
+            "description": "Numeric GPA points for this grade (e.g. 4.0, 3.3)."
+          },
+          "credit_hours": {
+            "type": "integer",
+            "title": "Credit Hours",
+            "description": "Credit-hours snapshot at time of completion (immutable historical record)."
+          },
+          "semester": {
+            "type": "string",
+            "title": "Semester",
+            "description": "Human-readable semester label, e.g. 'Fall 2023'."
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year",
+            "description": "Calendar year of completion."
+          },
+          "semester_number": {
+            "type": "integer",
+            "title": "Semester Number",
+            "description": "Canonical integer semester key (shared with StudyPlan.semester_number)."
+          },
+          "course": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CourseResponse"
+              }
+            ],
+            "description": "The course this grade was awarded for."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "grade",
+          "grade_numeric",
+          "credit_hours",
+          "semester",
+          "year",
+          "semester_number",
+          "course"
+        ],
+        "title": "GPAEntry"
+      },
+      "GPAResponse": {
+        "properties": {
+          "semester_gpa": {
+            "type": "number",
+            "title": "Semester Gpa",
+            "description": "GPA for the most recently completed semester."
+          },
+          "cumulative_gpa": {
+            "type": "number",
+            "title": "Cumulative Gpa",
+            "description": "Weighted cumulative GPA across all completed semesters."
+          },
+          "total_credits_completed": {
+            "type": "integer",
+            "title": "Total Credits Completed",
+            "description": "Total credit hours successfully completed by the student."
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/GPAEntry"
+            },
+            "type": "array",
+            "title": "History",
+            "description": "Full list of individual course-completion records, ordered by semester."
+          }
+        },
+        "type": "object",
+        "required": [
+          "semester_gpa",
+          "cumulative_gpa",
+          "total_credits_completed",
+          "history"
+        ],
+        "title": "GPAResponse",
+        "description": "Aggregated GPA summary for a student, returned by the GPA calculator service."
+      },
+      "GPAUpdateRequest": {
+        "properties": {
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade",
+            "description": "Letter grade (must be a key in GRADE_TO_NUMERIC): A+, A, A-, B+, B, B-, C+, C, C-, D+, D, F."
+          },
+          "semester": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semester",
+            "description": "Human-readable semester label, e.g. 'Fall 2023'."
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year",
+            "description": "Calendar year the grade was awarded."
+          },
+          "semester_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semester Number",
+            "description": "Canonical integer semester key (must match the StudyPlan row)."
+          }
+        },
+        "type": "object",
+        "title": "GPAUpdateRequest"
+      },
+      "GradeCreateRequest": {
+        "properties": {
+          "course_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Course Id",
+            "description": "UUID of the course being graded."
+          },
+          "grade": {
+            "type": "string",
+            "title": "Grade",
+            "description": "Letter grade (must be a key in GRADE_TO_NUMERIC): A+, A, A-, B+, B, B-, C+, C, C-, D+, D, F."
+          },
+          "semester": {
+            "type": "string",
+            "title": "Semester",
+            "description": "Human-readable semester label, e.g. 'Fall 2023'."
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year",
+            "description": "Calendar year the grade was awarded."
+          },
+          "semester_number": {
+            "type": "integer",
+            "title": "Semester Number",
+            "description": "Canonical integer semester key (must match the StudyPlan row)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "course_id",
+          "grade",
+          "semester",
+          "year",
+          "semester_number"
+        ],
+        "title": "GradeCreateRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MessageResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable result message."
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "MessageResponse",
+        "description": "Generic single-message response used for confirmations and no-op endpoints."
+      },
+      "PaginatedCourseResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CourseSummaryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of courses."
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number."
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Number of items per page."
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "size"
+        ],
+        "title": "PaginatedCourseResponse",
+        "description": "Paginated list of courses."
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token",
+            "description": "A valid, unexpired JWT refresh token issued by /login or a previous /refresh call."
+          }
+        },
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshRequest"
+      },
+      "ResetPasswordRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Password-reset token received from POST /api/auth/forgot-password."
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "New Password",
+            "description": "New plain-text password (minimum 8 characters). Hashed server-side."
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "title": "ResetPasswordRequest",
+        "description": "Request body for POST /api/auth/reset-password."
+      },
+      "SemesterActivateRequest": {
+        "properties": {
+          "semester_number": {
+            "type": "integer",
+            "title": "Semester Number",
+            "description": "Canonical semester number whose planned courses should be activated."
+          }
+        },
+        "type": "object",
+        "required": [
+          "semester_number"
+        ],
+        "title": "SemesterActivateRequest"
+      },
+      "StudyPlanCourse": {
+        "properties": {
+          "course": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CourseResponse"
+              }
+            ],
+            "description": "Full course details for this plan entry."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Stored lifecycle status: 'planned' | 'in_progress' | 'completed'. 'available' and 'locked' are computed projections, never stored."
+          },
+          "planned_semester": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned Semester",
+            "description": "Optional human-readable semester label (e.g. 'Semester 3', 'Fall 2025')."
+          }
+        },
+        "type": "object",
+        "required": [
+          "course",
+          "status"
+        ],
+        "title": "StudyPlanCourse"
+      },
+      "StudyPlanResponse": {
+        "properties": {
+          "completed": {
+            "items": {
+              "$ref": "#/components/schemas/StudyPlanCourse"
+            },
+            "type": "array",
+            "title": "Completed",
+            "description": "Courses the student has successfully completed."
+          },
+          "in_progress": {
+            "items": {
+              "$ref": "#/components/schemas/StudyPlanCourse"
+            },
+            "type": "array",
+            "title": "In Progress",
+            "description": "Courses the student is currently enrolled in."
+          },
+          "available": {
+            "items": {
+              "$ref": "#/components/schemas/StudyPlanCourse"
+            },
+            "type": "array",
+            "title": "Available",
+            "description": "Planned courses whose prerequisites are all satisfied (computed at read-time, never stored in StudyPlan.status)."
+          },
+          "locked": {
+            "items": {
+              "$ref": "#/components/schemas/StudyPlanCourse"
+            },
+            "type": "array",
+            "title": "Locked",
+            "description": "Planned courses with one or more unmet prerequisites (computed at read-time, never stored in StudyPlan.status)."
+          }
+        },
+        "type": "object",
+        "title": "StudyPlanResponse"
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token",
+            "description": "Short-lived JWT access token."
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token",
+            "description": "Long-lived JWT refresh token."
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "description": "OAuth2 token type (always 'bearer').",
+            "default": "bearer"
+          },
+          "user": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserResponse"
+              }
+            ],
+            "description": "Serialised user object for the authenticated student."
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "user"
+        ],
+        "title": "TokenResponse"
+      },
+      "UserLogin": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "Registered student e-mail address."
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Plain-text password for verification."
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "UserLogin"
+      },
+      "UserPreferencesResponse": {
+        "properties": {
+          "grading_scale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grading Scale",
+            "description": "Grading scale identifier."
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language",
+            "description": "Preferred UI language code."
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme",
+            "description": "UI theme preference."
+          },
+          "target_gpa": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Gpa",
+            "description": "Student's target GPA."
+          },
+          "current_semester": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Semester",
+            "description": "Current semester number."
+          }
+        },
+        "type": "object",
+        "title": "UserPreferencesResponse",
+        "description": "Preference fields returned by GET /api/user/preferences."
+      },
+      "UserPreferencesUpdate": {
+        "properties": {
+          "grading_scale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grading Scale",
+            "description": "Grading scale identifier (e.g. 'gpa_4', 'percentage')."
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language",
+            "description": "Preferred UI language code (e.g. 'en', 'ar')."
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme",
+            "description": "UI theme preference: 'light', 'dark', or 'system'."
+          },
+          "target_gpa": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 4,
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Gpa",
+            "description": "Student's target GPA (0.0 – 4.0)."
+          },
+          "current_semester": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Semester",
+            "description": "Current semester number (1-indexed)."
+          }
+        },
+        "type": "object",
+        "title": "UserPreferencesUpdate",
+        "description": "Writable preference fields exposed via PUT /api/user/preferences.\n\nAll fields are optional — send only what needs to change."
+      },
+      "UserRegister": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "Unique student e-mail address."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "Password",
+            "description": "Plain-text password (minimum 8 characters). Hashed server-side; never stored raw."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "title": "Name",
+            "description": "Student's full name (minimum 2 characters)."
+          },
+          "major": {
+            "type": "string",
+            "title": "Major",
+            "description": "Academic major / programme of study."
+          },
+          "university": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "University",
+            "description": "Name of the student's university (optional)."
+          },
+          "level": {
+            "type": "integer",
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Level",
+            "description": "Current academic year level (1 = Freshman … 4 = Senior)."
+          },
+          "enrollment_year": {
+            "type": "integer",
+            "maximum": 2030,
+            "minimum": 2000,
+            "title": "Enrollment Year",
+            "description": "Calendar year the student first enrolled."
+          },
+          "total_credit_hours": {
+            "type": "integer",
+            "enum": [120, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 150],
+            "title": "Total Credit Hours",
+            "description": "Required total credit hours for graduation."
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "name",
+          "major",
+          "level",
+          "enrollment_year",
+          "total_credit_hours"
+        ],
+        "title": "UserRegister"
+      },
+      "UserResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique user identifier (UUID v4)."
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "Student's e-mail address."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Student's full name."
+          },
+          "major": {
+            "type": "string",
+            "title": "Major",
+            "description": "Academic major / programme."
+          },
+          "university": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "University",
+            "description": "University name, if provided."
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level",
+            "description": "Current academic year level (1–4)."
+          },
+          "enrollment_year": {
+            "type": "integer",
+            "title": "Enrollment Year",
+            "description": "Year of first enrollment."
+          },
+          "total_credit_hours": {
+            "type": "integer",
+            "title": "Total Credit Hours",
+            "description": "Total credit hours required for the student's graduation plan."
+          },
+          "completed_credit_hours": {
+            "type": "integer",
+            "title": "Completed Credit Hours",
+            "description": "Credit hours successfully completed (denormalised cache)."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Account creation timestamp (UTC)."
+          },
+          "grading_scale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grading Scale",
+            "description": "Grading scale identifier."
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language",
+            "description": "Preferred UI language code."
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme",
+            "description": "UI theme preference."
+          },
+          "target_gpa": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Gpa",
+            "description": "Student's target GPA."
+          },
+          "current_semester": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Semester",
+            "description": "Current semester number."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name",
+          "major",
+          "level",
+          "enrollment_year",
+          "total_credit_hours",
+          "completed_credit_hours",
+          "created_at"
+        ],
+        "title": "UserResponse"
+      },
+      "UserUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Updated full name (minimum 2 characters)."
+          },
+          "major": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Major",
+            "description": "Updated academic major / programme of study."
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level",
+            "description": "Updated academic year level (1 = Freshman … 4 = Senior)."
+          },
+          "university": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "University",
+            "description": "Updated university name."
+          },
+          "total_credit_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "enum": [120, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 150],
+            "title": "Total Credit Hours",
+            "description": "Updated total credit-hour requirement for graduation."
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate",
+        "description": "Editable profile fields exposed via PATCH /api/auth/me.\n\nOnly ``name``, ``major``, ``level``, ``university``, and\n``total_credit_hours`` may be changed.\nIdentity fields (``id``, ``email``) and ``created_at`` are immutable.\nAll fields are optional — send only what needs to change."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkloadResponse": {
+        "properties": {
+          "total_hours": {
+            "type": "integer",
+            "title": "Total Hours",
+            "description": "Sum of credit hours across all in-progress courses for the semester."
+          },
+          "tier": {
+            "type": "string",
+            "title": "Tier",
+            "description": "Workload classification: 'Light' | 'Optimal' | 'Heavy'."
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_hours",
+          "tier"
+        ],
+        "title": "WorkloadResponse"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {
+
+            },
+            "tokenUrl": "/api/auth/token"
+          }
+        }
+      }
+    }
+  }
+}

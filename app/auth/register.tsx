@@ -1,60 +1,69 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
   TextInput,
+  TextInputProps,
   StatusBar,
   ActivityIndicator,
   Modal,
   Pressable,
   Keyboard,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { User, Mail, BookOpen, GraduationCap, ChevronDown, Check } from "lucide-react-native";
-import { useStore, useAppLocale, useThemeColors } from "../lib/store";
+import { User, Mail, Lock, Eye, EyeOff, BookOpen, GraduationCap, ChevronDown, Check } from "lucide-react-native";
+import { useStore, useAppLocale, useThemeColors } from "../../lib/store";
+import { ApiError } from "../../services/api";
+import * as authService from "../../services/auth";
 
-const Field = ({
+interface FieldProps extends TextInputProps {
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+  error?: string;
+  icon?: any;
+}
+
+const Field = React.forwardRef<TextInput, FieldProps>(({
   label,
   value,
   onChangeText,
   error,
   icon: Icon,
   ...props
-}: {
-  label: string;
-  value: string;
-  onChangeText: (t: string) => void;
-  error?: string;
-  icon?: any;
-  [key: string]: any;
-}) => {
+}, ref) => {
+  const [isFocused, setIsFocused] = useState(false);
   const { isRTL } = useAppLocale();
   const themeColors = useThemeColors();
   const palette = {
     textPrimary: themeColors.foreground,
     textSecondary: themeColors.mutedForeground,
     border: themeColors.border,
+    primary: themeColors.primary,
+    surface: themeColors.card,
   };
 
   return (
     <View style={S.fieldWrap}>
       <Text style={[S.fieldLabel, { textAlign: isRTL ? "right" : "left" }]}>{label}</Text>
       <View style={[
-        S.inputRow, 
-        { borderBottomColor: palette.border, flexDirection: isRTL ? "row-reverse" : "row" },
-        error ? S.inputRowErr : null
+        S.inputRow,
+        { borderColor: error ? "#EF4444" : isFocused ? palette.primary : palette.border, backgroundColor: palette.surface, flexDirection: isRTL ? "row-reverse" : "row" },
       ]}>
-        {Icon && <Icon size={15} color={error ? "#EF4444" : "#94A3B8"} strokeWidth={1.8} />}
+        {Icon && <Icon size={18} color={error ? "#EF4444" : isFocused ? palette.primary : "#94A3B8"} strokeWidth={1.8} />}
         <TextInput
+          ref={ref}
           style={[S.input, { color: palette.textPrimary, textAlign: isRTL ? "right" : "left" }]}
           value={value}
           onChangeText={onChangeText}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           placeholderTextColor={palette.textSecondary}
           autoCorrect={false}
           {...props}
@@ -63,7 +72,7 @@ const Field = ({
       {error ? <Text style={[S.errText, { textAlign: isRTL ? "right" : "left" }]}>{error}</Text> : null}
     </View>
   );
-};
+});
 
 const SelectField = ({
   label,
@@ -82,6 +91,7 @@ const SelectField = ({
     textPrimary: themeColors.foreground,
     textSecondary: themeColors.mutedForeground,
     border: themeColors.border,
+    surface: themeColors.card,
   };
 
   return (
@@ -89,9 +99,8 @@ const SelectField = ({
       <Text style={[S.fieldLabel, { textAlign: isRTL ? "right" : "left" }]}>{label}</Text>
       <TouchableOpacity 
         style={[
-          S.selectRow, 
-          { borderBottomColor: palette.border, flexDirection: isRTL ? "row-reverse" : "row" },
-          error ? S.inputRowErr : null
+          S.selectRow,
+          { borderColor: error ? "#EF4444" : palette.border, backgroundColor: palette.surface, flexDirection: isRTL ? "row-reverse" : "row" },
         ]} 
         onPress={onPress} 
         activeOpacity={0.75}
@@ -129,53 +138,75 @@ export default function RegisterScreen() {
     surface: themeColors.card,
   };
 
+  // Allowed total_credit_hours values as defined by the backend enum
+  const CREDIT_HOUR_OPTIONS = [120, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 150];
+
   const [formData, setFormData] = useState({
     fullName: "",
-    email: "student@university.edu",
-    major: "Computer Science",
+    email: "",
+    password: "",
+    major: "",
     university: "",
     academicLevel: "1",
     enrollmentYear: null as number | null,
+    totalCreditHours: null as number | null,
     gradingSystem: "4.0" as "4.0" | "5.0",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [activeSelect, setActiveSelect] = useState<null | "academicLevel" | "enrollmentYear">(null);
+  const [activeSelect, setActiveSelect] = useState<null | "academicLevel" | "enrollmentYear" | "totalCreditHours">(null);
+
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const majorRef = useRef<TextInput>(null);
+  const uniRef = useRef<TextInput>(null);
 
   const update = (key: string, value: any) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     const e: Record<string, string> = {};
     if (!formData.fullName.trim()) e.fullName = t("errNameReq");
+    else if (formData.fullName.trim().length < 2) e.fullName = "Name must be at least 2 characters";
     if (!formData.email.trim()) e.email = t("errEmailReq");
     else if (!formData.email.includes("@")) e.email = t("errEmailInv");
+    if (!formData.password) e.password = t("errPassReq");
+    else if (formData.password.length < 8) e.password = "Password must be at least 8 characters";
     if (!formData.major.trim()) e.major = t("errMajorReq");
     if (!formData.enrollmentYear) e.enrollmentYear = t("errYearReq");
+    if (!formData.totalCreditHours) e.totalCreditHours = t("errTotalCreditHoursReq");
     setErrors(e);
 
     if (Object.keys(e).length === 0) {
       setLoading(true);
-      setTimeout(() => {
-        store.signup({
-          fullName: formData.fullName,
-          email: formData.email,
-          major: formData.major,
-          academicLevel: Number(formData.academicLevel),
-          enrollmentYear: formData.enrollmentYear!,
-          gradingSystem: formData.gradingSystem,
+      try {
+        const session = await authService.register({
+          email: formData.email.trim(),
+          password: formData.password,
+          name: formData.fullName.trim(),
+          major: formData.major.trim(),
+          university: formData.university.trim() || null,
+          level: Number(formData.academicLevel),
+          enrollment_year: formData.enrollmentYear!,
+          total_credit_hours: formData.totalCreditHours!,
         });
+        store.setAuthSession(session);
         router.replace("/(tabs)");
+      } catch (error) {
+        const message = error instanceof ApiError ? error.message : "Unable to create account. Please try again.";
+        setErrors({ password: message });
+      } finally {
         setLoading(false);
-      }, 900);
+      }
     }
   };
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 10 }, (_, i) => currentYear - i);
-  const academicLevels = ["1", "2", "3", "4", "5"];
+  const academicLevels = ["1", "2", "3", "4"];
 
-  const openSelect = (type: "academicLevel" | "enrollmentYear") => {
+  const openSelect = (type: "academicLevel" | "enrollmentYear" | "totalCreditHours") => {
     Keyboard.dismiss();
     setActiveSelect(type);
   };
@@ -183,16 +214,15 @@ export default function RegisterScreen() {
   return (
     <SafeAreaView style={[S.root, { backgroundColor: palette.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={palette.background} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      <KeyboardAwareScrollView
         style={S.flex}
+        contentContainerStyle={S.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        enableOnAndroid={true}
+        enableAutomaticScroll={true}
+        extraScrollHeight={30}
       >
-        <ScrollView
-          style={S.flex}
-          contentContainerStyle={S.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           {/* ── Branding ──────────────────────────────────────── */}
           <View style={[S.brand, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
             <View style={S.logoBox}>
@@ -219,36 +249,66 @@ export default function RegisterScreen() {
               icon={User}
               textContentType="name"
               autoComplete="name"
+              returnKeyType="next"
+              onSubmitEditing={() => emailRef.current?.focus()}
+              blurOnSubmit={false}
             />
 
             <Field
+              ref={emailRef}
               label={t("emailAddressLabel")}
               value={formData.email}
               onChangeText={(tStr) => update("email", tStr)}
               error={errors.email}
               placeholder={t("emailPlaceholder")}
+              icon={Mail}
               keyboardType="email-address"
               autoCapitalize="none"
-              icon={Mail}
               textContentType="emailAddress"
               autoComplete="email"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
             />
 
             <Field
+              ref={passwordRef}
+              label={t("passwordLabel")}
+              value={formData.password}
+              onChangeText={(tStr) => update("password", tStr)}
+              error={errors.password}
+              placeholder={t("passwordPlaceholder")}
+              icon={Lock}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              textContentType="newPassword"
+              autoComplete="password-new"
+              returnKeyType="next"
+              onSubmitEditing={() => majorRef.current?.focus()}
+              blurOnSubmit={false}
+            />
+
+            <Field
+              ref={majorRef}
               label={t("major").toUpperCase()}
               value={formData.major}
               onChangeText={(tStr) => update("major", tStr)}
               error={errors.major}
               placeholder={t("majorPlaceholder")}
               icon={BookOpen}
+              returnKeyType="next"
+              onSubmitEditing={() => uniRef.current?.focus()}
+              blurOnSubmit={false}
             />
 
             <Field
+              ref={uniRef}
               label={t("university").toUpperCase()}
               value={formData.university}
               onChangeText={(tStr) => update("university", tStr)}
               placeholder={t("uniPlaceholder")}
               icon={GraduationCap}
+              returnKeyType="done"
             />
 
             {/* Academic Level & Enrollment Year — row */}
@@ -270,6 +330,14 @@ export default function RegisterScreen() {
                 />
               </View>
             </View>
+
+            {/* Total Credit Hours */}
+            <SelectField
+              label={t("totalCreditHoursLabel")}
+              valueText={formData.totalCreditHours ? `${formData.totalCreditHours} ${t("creditShort")}` : t("totalCreditHoursSelect")}
+              onPress={() => openSelect("totalCreditHours")}
+              error={errors.totalCreditHours}
+            />
 
             {/* Grading System */}
             <View style={S.fieldWrap}>
@@ -322,7 +390,11 @@ export default function RegisterScreen() {
               <View style={[S.selectSheet, { backgroundColor: palette.background }]}>
                 <View style={[S.selectHeader, { borderBottomColor: palette.border, flexDirection: isRTL ? "row-reverse" : "row" }]}>
                   <Text style={[S.selectTitle, { color: palette.textPrimary }]}>
-                    {activeSelect === "academicLevel" ? t("selectAcademicLevel") : t("selectEnrollmentYear")}
+                    {activeSelect === "academicLevel"
+                      ? t("selectAcademicLevel")
+                      : activeSelect === "enrollmentYear"
+                      ? t("selectEnrollmentYear")
+                      : t("totalCreditHoursSelect")}
                   </Text>
                   <TouchableOpacity onPress={() => setActiveSelect(null)} activeOpacity={0.7}>
                     <Text style={S.selectDone}>{t("done")}</Text>
@@ -332,12 +404,16 @@ export default function RegisterScreen() {
                 <ScrollView showsVerticalScrollIndicator={false}>
                   {(activeSelect === "academicLevel"
                     ? academicLevels.map((v) => ({ value: v, label: `${t("yearLabel")} ${v}` }))
-                    : years.map((y) => ({ value: y, label: String(y) }))
+                    : activeSelect === "enrollmentYear"
+                    ? years.map((y) => ({ value: y, label: String(y) }))
+                    : CREDIT_HOUR_OPTIONS.map((h) => ({ value: h, label: `${h} ${t("creditShort")}` }))
                   ).map((opt) => {
                     const selected =
                       activeSelect === "academicLevel"
                         ? String(opt.value) === String(formData.academicLevel)
-                        : Number(opt.value) === Number(formData.enrollmentYear);
+                        : activeSelect === "enrollmentYear"
+                        ? Number(opt.value) === Number(formData.enrollmentYear)
+                        : Number(opt.value) === Number(formData.totalCreditHours);
 
                     return (
                       <TouchableOpacity
@@ -347,8 +423,10 @@ export default function RegisterScreen() {
                         onPress={() => {
                           if (activeSelect === "academicLevel") {
                             update("academicLevel", String(opt.value));
-                          } else {
+                          } else if (activeSelect === "enrollmentYear") {
                             update("enrollmentYear", Number(opt.value));
+                          } else {
+                            update("totalCreditHours", Number(opt.value));
                           }
                           setActiveSelect(null);
                         }}
@@ -370,8 +448,7 @@ export default function RegisterScreen() {
               <Text style={S.footerLink}>{t("login")}</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -381,7 +458,7 @@ const S = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 52, paddingBottom: 40 },
 
-  brand: { alignItems: "center", gap: 14, marginBottom: 36 },
+  brand: { alignItems: "center", gap: 14, marginBottom: 20 },
   logoBox: {
     width: 46, height: 46, borderRadius: 13, backgroundColor: "#1E75FF",
     alignItems: "center", justifyContent: "center",
@@ -397,27 +474,28 @@ const S = StyleSheet.create({
   form: { gap: 0 },
   fieldWrap: { marginBottom: 20 },
   fieldLabel: { fontSize: 10.5, fontWeight: "700", color: "#64748B", letterSpacing: 1, marginBottom: 10 },
-  // Underline-only input — clean, no box
   inputRow: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    borderBottomWidth: 1.5,
-    paddingBottom: 10,
-    paddingHorizontal: 2,
+    gap: 12,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    height: 54,
+    paddingHorizontal: 16,
   },
-  inputRowErr: { borderBottomColor: "#EF4444" },
   input: { flex: 1, fontSize: 15, paddingVertical: 0 },
   errText: { fontSize: 11.5, color: "#EF4444", fontWeight: "500", marginTop: 5 },
 
-  rowGrid: { gap: 20 },
+  rowGrid: { gap: 12 },
 
   selectRow: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottomWidth: 1.5,
-    paddingBottom: 10,
-    paddingHorizontal: 2,
-    minHeight: 44,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    height: 54,
+    paddingHorizontal: 16,
   },
   selectValue: { fontSize: 15, fontWeight: "500", paddingVertical: 0, flex: 1 },
 

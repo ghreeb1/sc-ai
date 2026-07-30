@@ -1,17 +1,21 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Animated,
   ScrollView,
+  Switch,
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Modal,
   Pressable,
   Platform,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   ChevronLeft,
   ChevronDown,
@@ -23,20 +27,20 @@ import {
   Calculator,
   LogOut,
   Globe,
-  Sun,
   Moon,
+  Pencil,
+  Trash,
 } from "lucide-react-native";
-import { useStore } from "../lib/store";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useStore } from "../../lib/store";
+import { getUserPreferences, updateUserPreferences, deleteAccount } from "../../services/auth";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import {
-  borderRadius,
   colors,
   fontWeight,
   isSmallScreen,
-  shadows,
   spacing,
-} from "../lib/constants";
-import { Colors } from "../lib/theme";
+} from "../../lib/constants";
+import { Colors } from "../../lib/theme";
 
 type ProfileRow = {
   id: string;
@@ -67,7 +71,7 @@ type SettingOption = {
   accessibilityLabel: string;
 };
 
-const SETTINGS_COPY = {
+export const SETTINGS_COPY = {
   en: {
     settingsTitle: "Settings",
     accountKicker: "ACCOUNT",
@@ -98,6 +102,17 @@ const SETTINGS_COPY = {
     curriculumEmpty: "Add courses to manage your curriculum",
     logout: "Log out",
     done: "Done",
+    editProfile: "Edit Profile",
+    save: "Save",
+    cancel: "Cancel",
+    enrollmentYearTitle: "Enrollment Year",
+    totalCreditHours: "Total Credit Hours",
+    completedCreditHours: "Completed Credit Hours",
+    fieldRequired: "This field is required",
+    invalidLevel: "Level must be a positive integer",
+    deleteAccount: "Delete Account",
+    deleteAccountConfirm: "Are you sure you want to delete your account? This action cannot be undone.",
+    delete: "Delete",
   },
   ar: {
     settingsTitle: "الإعدادات",
@@ -128,8 +143,31 @@ const SETTINGS_COPY = {
     curriculumEmpty: "أضف مقررات لبدء إدارة خطتك الدراسية",
     logout: "تسجيل الخروج",
     done: "تم",
+    editProfile: "تعديل الملف الشخصي",
+    save: "حفظ",
+    cancel: "إلغاء",
+    enrollmentYearTitle: "سنة الالتحاق",
+    totalCreditHours: "إجمالي الساعات",
+    completedCreditHours: "الساعات المكتسبة",
+    fieldRequired: "هذا الحقل مطلوب",
+    invalidLevel: "يجب أن يكون المستوى رقمًا صحيحًا موجبًا",
+    deleteAccount: "حذف الحساب",
+    deleteAccountConfirm: "هل أنت متأكد أنك تريد حذف حسابك؟ لا يمكن التراجع عن هذا الإجراء.",
+    delete: "حذف",
   },
 } as const;
+
+function normalizeLanguage(value?: string | null) {
+  return value === "ar" ? "ar" : value === "en" ? "en" : null;
+}
+
+function normalizeTheme(value?: string | null) {
+  return value === "dark" ? "dark" : value === "light" ? "light" : null;
+}
+
+function normalizeGradingScale(value?: string | null) {
+  return value === "5.0" ? "5.0" : value === "4.0" ? "4.0" : null;
+}
 
 function Row({
   row,
@@ -142,7 +180,7 @@ function Row({
 }) {
   return (
     <TouchableOpacity
-      activeOpacity={row.onPress ? 0.75 : 1}
+      activeOpacity={row.onPress ? 0.7 : 1}
       onPress={row.onPress}
       disabled={!row.onPress}
       style={[
@@ -258,10 +296,100 @@ function PreferenceRow({
   );
 }
 
+// ─── ThemeToggleRow — Material 3 Switch ───────────────────────────────────────
+
+function ThemeToggleRow({
+  icon,
+  label,
+  description,
+  isDark,
+  onChange,
+  palette,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  isDark: boolean;
+  onChange: (nextValue: string) => void;
+  palette: SettingsPalette;
+}) {
+  // Subtle scale animation on toggle
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handleToggle = (value: boolean) => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.96,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        damping: 14,
+        stiffness: 260,
+      }),
+    ]).start();
+    onChange(value ? "dark" : "light");
+  };
+
+  return (
+    <Animated.View
+      style={[
+        S.preferenceRow,
+        {
+          backgroundColor: palette.surface,
+          borderColor: palette.border,
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
+    >
+      <View style={[S.preferenceHeader, { marginBottom: 0 }]}>
+        <View
+          style={[S.preferenceIconBox, { backgroundColor: palette.surfaceAlt }]}
+        >
+          {icon}
+        </View>
+        <View style={S.preferenceCopy}>
+          <Text style={[S.preferenceLabel, { color: palette.textPrimary }]}>
+            {label}
+          </Text>
+          <Text style={[S.preferenceDescription, { color: palette.textMuted }]}>
+            {description}
+          </Text>
+        </View>
+        {/* Right side: label + Switch */}
+        <View style={S.themeSwitchGroup}>
+          <Moon
+            size={14}
+            color={isDark ? colors.primary : palette.textPlaceholder}
+            strokeWidth={2.2}
+          />
+          <Switch
+            value={isDark}
+            onValueChange={handleToggle}
+            trackColor={{
+              false: palette.segmentedBg,
+              true: colors.primary + "55",
+            }}
+            thumbColor={isDark ? colors.primary : palette.textPlaceholder}
+            ios_backgroundColor={palette.segmentedBg}
+            accessibilityRole="switch"
+            accessibilityLabel="Toggle dark mode"
+            accessibilityState={{ checked: isDark }}
+          />
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const store = useStore();
   const [showGradingModal, setShowGradingModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const insets = useSafeAreaInsets();
   const theme = store.theme;
   const language = store.language;
@@ -292,6 +420,112 @@ export default function SettingsScreen() {
     : "-";
   const university = profile?.university?.trim() ? profile.university : "—";
   const gradingSystem = profile?.gradingSystem || "4.0";
+
+  const applyPreferences = useCallback(
+    (preferences: Awaited<ReturnType<typeof getUserPreferences>>) => {
+      const nextLanguage = normalizeLanguage(preferences.language);
+      const nextTheme = normalizeTheme(preferences.theme);
+      const nextGradingScale = normalizeGradingScale(
+        preferences.grading_scale,
+      );
+
+      if (nextLanguage && nextLanguage !== store.language) {
+        store.setLanguage(nextLanguage);
+      }
+      if (nextTheme && nextTheme !== store.theme) {
+        store.setTheme(nextTheme);
+      }
+      if (
+        nextGradingScale &&
+        nextGradingScale !== store.profile?.gradingSystem
+      ) {
+        store.updateGradingSystem(nextGradingScale);
+      }
+    },
+    [store],
+  );
+
+  const refreshPreferences = useCallback(async () => {
+    try {
+      applyPreferences(await getUserPreferences());
+    } catch {}
+  }, [applyPreferences]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshPreferences();
+    }, [refreshPreferences]),
+  );
+
+  const handleLanguageChange = useCallback(
+    async (nextValue: string) => {
+      const nextLanguage = normalizeLanguage(nextValue);
+      if (!nextLanguage || nextLanguage === store.language) return;
+
+      try {
+        applyPreferences(await updateUserPreferences({ language: nextLanguage }));
+      } catch {}
+    },
+    [applyPreferences, store.language],
+  );
+
+  const handleThemeChange = useCallback(
+    async (nextValue: string) => {
+      const nextTheme = normalizeTheme(nextValue);
+      if (!nextTheme || nextTheme === store.theme) return;
+
+      try {
+        applyPreferences(await updateUserPreferences({ theme: nextTheme }));
+      } catch {}
+    },
+    [applyPreferences, store.theme],
+  );
+
+  const handleGradingSystemChange = useCallback(
+    async (nextValue: "4.0" | "5.0") => {
+      if (nextValue === gradingSystem) {
+        setShowGradingModal(false);
+        return;
+      }
+
+      try {
+        applyPreferences(
+          await updateUserPreferences({ grading_scale: nextValue }),
+        );
+        setShowGradingModal(false);
+      } catch {}
+    },
+    [applyPreferences, gradingSystem],
+  );
+
+  const openEditProfile = () => {
+    router.push("/edit-profile");
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      copy.deleteAccount,
+      copy.deleteAccountConfirm,
+      [
+        { text: copy.cancel, style: "cancel" },
+        { 
+          text: copy.delete, 
+          style: "destructive",
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+               await deleteAccount();
+               router.replace("/auth/login");
+            } catch (error) {
+               Alert.alert("Error", "Could not delete account.");
+            } finally {
+               setIsDeleting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const profileRows: ProfileRow[] = useMemo(() => {
     return [
@@ -393,42 +627,13 @@ export default function SettingsScreen() {
     [copy.arabic, copy.english],
   );
 
-  const themeOptions: SettingOption[] = useMemo(
-    () => [
-      {
-        value: "light",
-        label: copy.lightMode,
-        icon: (
-          <Sun
-            size={15}
-            color={theme === "light" ? colors.primary : palette.textMuted}
-            strokeWidth={2.1}
-          />
-        ),
-        accessibilityLabel: "Set theme to light mode",
-      },
-      {
-        value: "dark",
-        label: copy.darkMode,
-        icon: (
-          <Moon
-            size={15}
-            color={theme === "dark" ? colors.primary : palette.textMuted}
-            strokeWidth={2.1}
-          />
-        ),
-        accessibilityLabel: "Set theme to dark mode",
-      },
-    ],
-    [copy.darkMode, copy.lightMode, palette.textMuted, theme],
-  );
-
-  const handleLogout = () => {
-    store.logout();
-    router.replace("/auth/login");
+  const handleLogout = async () => {
+    try {
+      await store.logout();
+    } finally {
+      router.replace("/auth/login");
+    }
   };
-
-  const hasCourses = store.courses.length > 0;
 
   return (
     <SafeAreaView style={[S.root, { backgroundColor: palette.background }]}>
@@ -478,9 +683,30 @@ export default function SettingsScreen() {
         <Text style={[S.sectionKicker, { color: palette.textPlaceholder }]}>
           {copy.accountKicker}
         </Text>
-        <Text style={[S.sectionTitle, { color: palette.textPrimary }]}>
-          {copy.profileTitle}
-        </Text>
+        <View style={S.profileHeader}>
+          <Text style={[S.sectionTitle, { color: palette.textPrimary }]}>
+            {copy.profileTitle}
+          </Text>
+          <Pressable
+            onPress={openEditProfile}
+            accessibilityRole="button"
+            accessibilityLabel={copy.editProfile}
+            style={({ pressed }) => [
+              S.editProfileBtn,
+              {
+                borderColor: colors.primary,
+                backgroundColor: pressed
+                  ? colors.primary + "12"
+                  : "transparent",
+              },
+            ]}
+          >
+            <Pencil size={12} color={colors.primary} strokeWidth={2.5} />
+            <Text style={[S.editProfileBtnText, { color: colors.primary }]}>
+              {copy.editProfile}
+            </Text>
+          </Pressable>
+        </View>
 
         <View
           style={[
@@ -501,7 +727,7 @@ export default function SettingsScreen() {
         <Text
           style={[
             S.sectionTitle,
-            { marginTop: 18, color: palette.textPrimary },
+            { marginTop: 24, color: palette.textPrimary },
           ]}
         >
           {copy.preferencesTitle}
@@ -517,52 +743,20 @@ export default function SettingsScreen() {
             description={copy.languageDescription}
             options={languageOptions}
             value={language}
-            onChange={(nextValue) =>
-              store.setLanguage(nextValue as "en" | "ar")
-            }
+            onChange={handleLanguageChange}
             palette={palette}
           />
-          <PreferenceRow
-            icon={<Sun size={18} color={palette.textMuted} strokeWidth={2} />}
+          <ThemeToggleRow
+            icon={<Moon size={18} color={palette.textMuted} strokeWidth={2} />}
             label={copy.themeLabel}
             description={copy.themeDescription}
-            options={themeOptions}
-            value={theme}
-            onChange={(nextValue) =>
-              store.setTheme(nextValue as "light" | "dark")
-            }
+            isDark={isDark}
+            onChange={handleThemeChange}
             palette={palette}
           />
         </View>
 
-        <Text
-          style={[
-            S.sectionTitle,
-            { marginTop: 18, color: palette.textPrimary },
-          ]}
-        >
-          {copy.curriculumTitle}
-        </Text>
-        <View
-          style={[
-            S.managerCard,
-            { backgroundColor: palette.surface, borderColor: palette.border },
-          ]}
-        >
-          <View
-            style={[S.managerIcon, { backgroundColor: palette.surfaceAlt }]}
-          >
-            <BookOpen size={20} color={palette.textMuted} strokeWidth={2} />
-          </View>
-          <Text style={[S.managerTitle, { color: palette.textPrimary }]}>
-            {hasCourses
-              ? `${store.courses.length} ${copy.coursesSuffix}`
-              : copy.noCourses}
-          </Text>
-          <Text style={[S.managerSub, { color: palette.textMuted }]}>
-            {hasCourses ? copy.curriculumPresent : copy.curriculumEmpty}
-          </Text>
-        </View>
+
 
         <TouchableOpacity
           style={[
@@ -570,10 +764,38 @@ export default function SettingsScreen() {
             { borderColor: palette.border, backgroundColor: palette.surface },
           ]}
           onPress={handleLogout}
-          activeOpacity={0.8}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel={copy.logout}
         >
-          <LogOut size={18} color={colors.danger} strokeWidth={2.2} />
+          <LogOut size={17} color={colors.danger} strokeWidth={2.2} />
           <Text style={S.logoutText}>{copy.logout}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            S.deleteBtn,
+            {
+              borderColor: colors.danger + "40",
+              backgroundColor: isDark
+                ? colors.danger + "12"
+                : colors.danger + "08",
+            },
+          ]}
+          onPress={handleDeleteAccount}
+          activeOpacity={0.75}
+          disabled={isDeleting}
+          accessibilityRole="button"
+          accessibilityLabel={copy.deleteAccount}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color={colors.danger} />
+          ) : (
+            <>
+              <Trash size={17} color={colors.danger} strokeWidth={2.2} />
+              <Text style={S.logoutText}>{copy.deleteAccount}</Text>
+            </>
+          )}
         </TouchableOpacity>
       </ScrollView>
 
@@ -606,10 +828,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 key={sys}
                 activeOpacity={0.75}
-                onPress={() => {
-                  store.updateGradingSystem(sys);
-                  setShowGradingModal(false);
-                }}
+                onPress={() => handleGradingSystemChange(sys)}
                 style={[S.sheetOption, { borderBottomColor: palette.border }]}
               >
                 <Text
@@ -626,170 +845,206 @@ export default function SettingsScreen() {
           })}
         </View>
       </Modal>
+
+
     </SafeAreaView>
   );
 }
 
 const S = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background.primary },
+  root: { flex: 1 },
+
+  // ── Top bar ──
   topBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: isSmallScreen ? spacing.md : spacing.lg,
-    paddingVertical: isSmallScreen ? spacing.sm : spacing.md,
-    borderBottomWidth: 1,
+    paddingHorizontal: isSmallScreen ? 16 : 20,
+    paddingVertical: isSmallScreen ? 10 : 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border.light,
-    backgroundColor: colors.background.primary,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
   topTitle: {
     fontSize: 16,
     fontWeight: fontWeight.extrabold,
-    color: colors.text.primary,
+    letterSpacing: -0.3,
   },
-  topRightSpace: { width: 38, height: 38 },
+  topRightSpace: { width: 36, height: 36 },
 
+  // ── Scroll ──
   scroll: {
-    paddingHorizontal: isSmallScreen ? spacing.md : spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
+    paddingHorizontal: isSmallScreen ? 16 : 20,
+    paddingTop: 20,
   },
 
+  // ── Section labels ──
   sectionKicker: {
     fontSize: 10,
-    fontWeight: fontWeight.bold,
-    color: colors.text.placeholder,
-    letterSpacing: 1.2,
+    fontWeight: fontWeight.extrabold,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  profileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: fontWeight.bold,
-    color: colors.text.primary,
-    marginTop: 10,
-    marginBottom: 10,
+    fontSize: 15,
+    fontWeight: fontWeight.extrabold,
+    letterSpacing: -0.3,
   },
   sectionSubTitle: {
     fontSize: 11.5,
     fontWeight: fontWeight.medium,
-    marginTop: -4,
-    marginBottom: 10,
+    marginTop: 2,
+    marginBottom: 12,
+    lineHeight: 16,
   },
 
-  card: {
-    backgroundColor: colors.background.card,
+  // ── Edit Profile outlined button ──
+  editProfileBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     borderWidth: 1,
-    borderColor: colors.border.light,
-    borderRadius: borderRadius.xl,
+    borderRadius: 20,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+  },
+  editProfileBtnText: {
+    fontSize: 11,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 0.1,
+  },
+
+  // ── Profile card ──
+  card: {
+    borderWidth: 1,
+    borderRadius: 20,
     overflow: "hidden",
-    ...shadows.sm,
+    marginBottom: 0,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
   },
   rowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(226,232,240,0.65)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowIconBox: {
     width: 34,
     height: 34,
-    borderRadius: 12,
-    backgroundColor: colors.background.tertiary,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+    flexShrink: 0,
   },
   rowText: { flex: 1 },
   rowLabel: {
-    fontSize: 10.5,
-    fontWeight: fontWeight.medium,
-    color: colors.text.placeholder,
+    fontSize: 10,
+    fontWeight: fontWeight.extrabold,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
     marginBottom: 2,
   },
   rowValue: {
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: fontWeight.semibold,
-    color: colors.text.primary,
   },
   rowRight: { marginLeft: 10 },
 
+  // ── Grading pill ──
   gradePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     borderWidth: 1,
-    borderColor: colors.border.light,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: colors.background.primary,
+    paddingVertical: 7,
   },
   gradePillText: {
     fontSize: 12,
     fontWeight: fontWeight.semibold,
-    color: colors.text.primary,
   },
 
+  // ── Preference cards ──
   preferenceList: {
-    gap: 12,
+    gap: 10,
   },
   preferenceRow: {
     borderWidth: 1,
-    borderRadius: borderRadius.xl,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    ...shadows.sm,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
   preferenceHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 12,
+    marginBottom: 14,
   },
   preferenceIconBox: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+    flexShrink: 0,
   },
   preferenceCopy: {
     flex: 1,
   },
   preferenceLabel: {
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: fontWeight.bold,
     marginBottom: 3,
+    letterSpacing: -0.1,
   },
   preferenceDescription: {
     fontSize: 11.5,
     fontWeight: fontWeight.medium,
     lineHeight: 17,
   },
+
+  // ── Language segmented control ──
   segmentedControl: {
     flexDirection: "row",
     padding: 4,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 6,
+    gap: 4,
   },
   segmentButton: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 12,
+    minHeight: 42,
+    borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingVertical: 9,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -805,50 +1060,40 @@ const S = StyleSheet.create({
     textAlign: "center",
   },
 
-  managerCard: {
-    backgroundColor: colors.background.card,
-    borderWidth: 1,
-    borderColor: colors.border.light,
-    borderRadius: borderRadius.xl,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+  // ── Theme switch row ──
+  themeSwitchGroup: {
+    flexDirection: "row",
     alignItems: "center",
-    ...shadows.sm,
-  },
-  managerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: colors.background.tertiary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-  managerTitle: {
-    fontSize: 13,
-    fontWeight: fontWeight.extrabold,
-    color: colors.text.primary,
-    marginBottom: 4,
-  },
-  managerSub: {
-    fontSize: 11.5,
-    fontWeight: fontWeight.medium,
-    color: colors.text.muted,
-    textAlign: "center",
+    gap: 8,
+    marginLeft: 8,
+    flexShrink: 0,
   },
 
+  // ── Action buttons ──
   logoutBtn: {
-    marginTop: 18,
+    marginTop: 20,
     borderWidth: 1,
-    borderColor: colors.border.light,
-    borderRadius: 12,
-    backgroundColor: colors.background.card,
-    height: 48,
+    borderRadius: 14,
+    height: 50,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    ...shadows.sm,
+    gap: 9,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  deleteBtn: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    height: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
   },
   logoutText: {
     fontSize: 13,
@@ -856,28 +1101,26 @@ const S = StyleSheet.create({
     color: colors.danger,
   },
 
-  sheetOverlay: { flex: 1, backgroundColor: "rgba(15,23,42,0.35)" },
+  // ── Grading bottom sheet ──
+  sheetOverlay: { flex: 1, backgroundColor: "rgba(15,23,42,0.4)" },
   sheet: {
-    backgroundColor: colors.background.primary,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 18,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(226,232,240,0.9)",
-    marginBottom: 6,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: 4,
   },
   sheetTitle: {
     fontSize: 15,
     fontWeight: fontWeight.extrabold,
-    color: colors.text.primary,
     letterSpacing: -0.2,
   },
   sheetDone: {
@@ -889,18 +1132,16 @@ const S = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(226,232,240,0.65)",
+    paddingVertical: 15,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sheetOptionText: {
     fontSize: 14,
     fontWeight: fontWeight.semibold,
-    color: colors.text.primary,
   },
   sheetCheck: {
     fontSize: 16,
-    fontWeight: fontWeight.black,
     color: colors.primary,
+    fontWeight: fontWeight.bold as any,
   },
 });

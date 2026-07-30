@@ -18,8 +18,8 @@ import {
 import type { LucideIcon } from "lucide-react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useStore } from "../lib/store";
-import { Colors } from "../lib/theme";
+import { useStore } from "../../lib/store";
+import { Colors } from "../../lib/theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const isSmallScreen = SCREEN_WIDTH < 375;
@@ -46,12 +46,15 @@ function ScholarTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     focusedRoute === "planner";
   if (!isMainScreen) return null;
 
+  const barMarginH = isSmallScreen ? 12 : 14;
+  const barMarginBottom = isSmallScreen ? 10 : 12;
   const barHeight =
     Platform.OS === "ios" ? (isSmallScreen ? 64 : 70) : isSmallScreen ? 58 : 62;
   const bottomInset = Math.max(insets.bottom, Platform.OS === "ios" ? 8 : 0);
   const fabSize = isSmallScreen ? 56 : 60;
   const fabRight = isSmallScreen ? 16 : 20;
-  const fabBottom = barHeight + bottomInset + (isSmallScreen ? 14 : 18);
+  // FAB sits above the floating bar surface (bar height + its bottom margin + safe area + gap)
+  const fabBottom = barHeight + barMarginBottom + bottomInset + (isSmallScreen ? 14 : 18);
 
   const activeColor = "#2563EB";
   const inactiveColor = themeColors.mutedForeground;
@@ -92,7 +95,11 @@ function ScholarTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   };
 
   return (
-    <View pointerEvents="box-none" className="absolute inset-x-0 bottom-0">
+    <View
+      pointerEvents="box-none"
+      className="absolute inset-x-0 bottom-0"
+      style={{ backgroundColor: themeColors.background }}
+    >
       <Animated.View
         pointerEvents="box-none"
         style={{
@@ -229,10 +236,17 @@ function ScholarTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
+  const theme = useStore((state) => state.theme);
+  const themeColors = Colors[theme];
+
   return (
     <Tabs
       tabBar={(props) => <ScholarTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        sceneStyle: { backgroundColor: themeColors.background },
+        tabBarStyle: { backgroundColor: themeColors.background },
+      }}
     >
       <Tabs.Screen
         name="index"

@@ -1,14 +1,17 @@
 {
   "cli": {
-    "version": ">= 10.0.0"
+    "version": ">= 10.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "preview": {
+      "channel": "preview",
+      "environment": "preview",
       "android": {
         "buildType": "apk"
       },
       "ios": {
-        "buildType": "simulator"
+        "simulator": true
       }
     },
     "preview2": {
@@ -16,22 +19,20 @@
         "buildType": "apk"
       },
       "ios": {
-        "buildType": "simulator"
+        "simulator": true
       }
     },
     "preview3": {
       "developmentClient": true
     },
     "production": {
-      "ios": {
-        "buildType": "archive"
-      }
+      "environment": "production"
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": 0
+        "ascAppId": "0"
       }
     }
   }

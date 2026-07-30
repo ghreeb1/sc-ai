@@ -4,17 +4,18 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
-  ScrollView,
-  KeyboardAvoidingView,
   Platform,
   TextInput,
   StatusBar,
   ActivityIndicator,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Globe, Sun, Moon } from "lucide-react-native";
-import { useStore, useAppLocale, useThemeColors } from "../lib/store";
+import { useStore, useAppLocale, useThemeColors } from "../../lib/store";
+import { ApiError } from "../../services/api";
+import * as authService from "../../services/auth";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -27,8 +28,12 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+
+  const passwordRef = React.useRef<TextInput>(null);
 
   const palette = {
     background: themeColors.background,
@@ -41,7 +46,7 @@ export default function LoginScreen() {
     iconBg: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)",
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const e: Record<string, string> = {};
     if (!email.trim()) e.email = t("errEmailReq");
     else if (!email.includes("@")) e.email = t("errEmailInv");
@@ -50,11 +55,22 @@ export default function LoginScreen() {
 
     if (Object.keys(e).length === 0) {
       setLoading(true);
-      setTimeout(() => {
-        store.login(email.trim());
+      try {
+        // ── A: Login flow ─────────────────────────────────────────────────
+        const session = await authService.login({ email: email.trim(), password });
+        // login() already logs the HTTP response and token values inside auth.ts
+        // ── A: setAuthSession ─────────────────────────────────────────────
+        store.setAuthSession(session);
+        // ── A: Auth state after setAuthSession ───────────────────────────
+        // ── B: Navigation ─────────────────────────────────────────────────
         router.replace("/(tabs)");
+      } catch (error) {
+        
+        const message = error instanceof ApiError ? error.message : "Unable to sign in. Please try again.";
+        setErrors({ password: message });
+      } finally {
         setLoading(false);
-      }, 900);
+      }
     }
   };
 
@@ -85,16 +101,15 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      <KeyboardAwareScrollView
         style={S.flex}
+        contentContainerStyle={S.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        enableOnAndroid={true}
+        enableAutomaticScroll={true}
+        extraScrollHeight={20}
       >
-        <ScrollView
-          style={S.flex}
-          contentContainerStyle={S.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           {/* ── Branding ──────────────────────────────────────── */}
           <View style={[S.brand, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
             <View style={S.logoBox}>
@@ -122,20 +137,23 @@ export default function LoginScreen() {
               <Text style={[S.fieldLabel, { textAlign: isRTL ? "right" : "left" }]}>{t("emailAddressLabel")}</Text>
               <View style={[
                 S.inputRow,
-                { borderBottomColor: palette.border, flexDirection: isRTL ? "row-reverse" : "row" },
-                errors.email ? S.inputRowErr : null
+                { borderColor: errors.email ? "#EF4444" : emailFocused ? palette.primary : palette.border, backgroundColor: palette.surface, flexDirection: isRTL ? "row-reverse" : "row" },
               ]}>
-                <Mail size={15} color={errors.email ? "#EF4444" : "#94A3B8"} strokeWidth={1.8} />
+                <Mail size={18} color={errors.email ? "#EF4444" : emailFocused ? palette.primary : "#94A3B8"} strokeWidth={1.8} />
                 <TextInput
                   style={[S.input, { color: palette.textPrimary, textAlign: isRTL ? "right" : "left" }]}
                   placeholder={t("emailPlaceholder")}
                   placeholderTextColor={palette.textSecondary}
                   value={email}
-                  onChangeText={(t) => { setEmail(t); if (errors.email) setErrors({ ...errors, email: "" }); }}
+                  onChangeText={(v) => { setEmail(v); if (errors.email) setErrors({ ...errors, email: "" }); }}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
                 />
               </View>
               {errors.email ? <Text style={[S.errText, { textAlign: isRTL ? "right" : "left" }]}>{errors.email}</Text> : null}
@@ -146,16 +164,18 @@ export default function LoginScreen() {
               <Text style={[S.fieldLabel, { textAlign: isRTL ? "right" : "left" }]}>{t("passwordLabel")}</Text>
               <View style={[
                 S.inputRow,
-                { borderBottomColor: palette.border, flexDirection: isRTL ? "row-reverse" : "row" },
-                errors.password ? S.inputRowErr : null
+                { borderColor: errors.password ? "#EF4444" : passwordFocused ? palette.primary : palette.border, backgroundColor: palette.surface, flexDirection: isRTL ? "row-reverse" : "row" },
               ]}>
-                <Lock size={15} color={errors.password ? "#EF4444" : "#94A3B8"} strokeWidth={1.8} />
+                <Lock size={18} color={errors.password ? "#EF4444" : passwordFocused ? palette.primary : "#94A3B8"} strokeWidth={1.8} />
                 <TextInput
+                  ref={passwordRef}
                   style={[S.input, { color: palette.textPrimary, textAlign: isRTL ? "right" : "left" }]}
                   placeholder={t("passwordPlaceholder")}
                   placeholderTextColor={palette.textSecondary}
                   value={password}
-                  onChangeText={(t) => { setPassword(t); if (errors.password) setErrors({ ...errors, password: "" }); }}
+                  onChangeText={(v) => { setPassword(v); if (errors.password) setErrors({ ...errors, password: "" }); }}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -167,8 +187,8 @@ export default function LoginScreen() {
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   {showPassword
-                    ? <EyeOff size={15} color="#94A3B8" strokeWidth={1.8} />
-                    : <Eye size={15} color="#94A3B8" strokeWidth={1.8} />
+                    ? <EyeOff size={18} color="#94A3B8" strokeWidth={1.8} />
+                    : <Eye size={18} color="#94A3B8" strokeWidth={1.8} />
                   }
                 </TouchableOpacity>
               </View>
@@ -176,7 +196,11 @@ export default function LoginScreen() {
             </View>
 
             {/* Forgot */}
-            <TouchableOpacity style={[S.forgotRow, { alignSelf: isRTL ? "flex-start" : "flex-end" }]} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={[S.forgotRow, { alignSelf: isRTL ? "flex-start" : "flex-end" }]}
+              activeOpacity={0.7}
+              onPress={() => router.push("/auth/forgot-password")}
+            >
               <Text style={S.forgotText}>{t("forgotPassword")}</Text>
             </TouchableOpacity>
 
@@ -204,8 +228,7 @@ export default function LoginScreen() {
               <Text style={S.footerLink}>{t("createAccount")}</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -238,7 +261,7 @@ const S = StyleSheet.create({
   },
 
   // Branding
-  brand: { alignItems: "center", gap: 14, marginBottom: 48 },
+  brand: { alignItems: "center", gap: 14, marginBottom: 20 },
   logoBox: {
     width: 46, height: 46, borderRadius: 13,
     backgroundColor: "#1E75FF",
@@ -252,7 +275,7 @@ const S = StyleSheet.create({
 
   // Copy
   title: { fontSize: 28, fontWeight: "800", letterSpacing: -0.5, marginBottom: 8 },
-  subtitle: { fontSize: 14, fontWeight: "400", lineHeight: 20, marginBottom: 36 },
+  subtitle: { fontSize: 14, fontWeight: "400", lineHeight: 20, marginBottom: 24 },
 
   // Form
   form: { gap: 0 },
@@ -261,15 +284,15 @@ const S = StyleSheet.create({
     fontSize: 10.5, fontWeight: "700", color: "#64748B",
     letterSpacing: 1, marginBottom: 10,
   },
-  // Underline-style input row (not a box — subtle bottom border only)
   inputRow: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    borderBottomWidth: 1.5,
-    paddingBottom: 10,
-    paddingHorizontal: 2,
+    gap: 12,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    height: 54,
+    paddingHorizontal: 16,
   },
-  inputRowErr: { borderBottomColor: "#EF4444" },
   input: { flex: 1, fontSize: 15, paddingVertical: 0 },
   errText: { fontSize: 11.5, color: "#EF4444", fontWeight: "500", marginTop: 5 },
 

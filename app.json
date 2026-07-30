@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "SCHOLAR",
-    "slug": "scholar-mobile",
+    "name": "Scholar AI",
+    "slug": "scholar-ai",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -9,43 +9,51 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/branded-splash.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F3F4F6"
+      "backgroundColor": "#FFFFFF",
+      "imageWidth": 260
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F3F4F6",
-          "image": "./assets/branded-splash.png",
-          "resizeMode": "contain"
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 260
         }
       ]
     ],
     "assetBundlePatterns": [
-      "**/*"
+      "assets/**/*"
     ],
     "ios": {
-      "supportsTabletMode": true,
+      "supportsTablet": true,
       "requireFullScreen": false,
-      "bundleIdentifier": "com.scholar.mobile"
+      "bundleIdentifier": "com.scholar.ai",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f1419"
+        "backgroundColor": "#0D6EFD"
       },
-      "package": "com.scholar.mobile",
+      "package": "com.scholar.ai",
       "softwareKeyboardLayoutMode": "resize"
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#020617",
+      "barStyle": "light-content"
     },
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "scholar",
+    "scheme": "scholar-ai",
     "platforms": [
       "ios",
       "android",
@@ -53,6 +61,18 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "publicApiUrl": {},
+      "publicApiVersion": {},
+      "publicAppEnv": {},
+      "router": {},
+      "eas": {
+        "projectId": "6fd59b88-ac1c-4cd4-9ee2-404f875deb90"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
