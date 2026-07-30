@@ -17,3 +17,7 @@ An AI-powered academic companion built with React Native and Expo.
 - TypeScript
 - FastAPI
 - Supabase
+
+## Project Status
+
+ SC AI is currently under active development.
